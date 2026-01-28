@@ -1,0 +1,33 @@
+{
+  "name": "ollama-assistant",
+  "version": "2.0.0",
+  "description": "A sophisticated AI assistant powered by local Ollama models - just talk naturally!",
+  "type": "module",
+  "main": "assistant.js",
+  "scripts": {
+    "start": "node enhanced.js",
+    "chat": "node enhanced.js",
+    "enhanced": "node enhanced.js",
+    "chat-cmd": "node enhanced.js",
+    "install-db": "npm install better-sqlite3",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ollama",
+    "ai",
+    "assistant",
+    "cli",
+    "local-ai",
+    "natural-language"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "chroma-js": "^2.6.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "node-telegram-bot-api": "^0.67.0",
+    "uuid": "^10.0.0"
+  }
+}
