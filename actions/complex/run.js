@@ -18,6 +18,13 @@ const SAFE_COMMANDS = new Set([
   'git log --oneline',
   'git branch',
   'git diff --stat',
+  'npm',
+  'node',
+  'which',
+  'whoami',
+  'uname',
+  'clear',
+  'exit',
 ]);
 
 export default {

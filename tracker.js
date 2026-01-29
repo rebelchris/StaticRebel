@@ -136,6 +136,32 @@ class TrackerStore {
     const lastEntry = data.records[data.records.length - 1]?.timestamp;
     this.updateTracker(trackerId, { count, lastEntry });
   }
+
+  /**
+   * Get records for a tracker (alias for loadRecords for compatibility)
+   */
+  getRecords(trackerId) {
+    return this.loadRecords(trackerId);
+  }
+
+  /**
+   * Get records by date range
+   */
+  getRecordsByDateRange(trackerId, startDate, endDate) {
+    const data = this.loadRecords(trackerId);
+    if (!startDate && !endDate) {
+      return data;
+    }
+
+    const filtered = data.records.filter((r) => {
+      const recordDate = new Date(r.timestamp);
+      if (startDate && recordDate < new Date(startDate)) return false;
+      if (endDate && recordDate > new Date(endDate)) return false;
+      return true;
+    });
+
+    return { records: filtered };
+  }
 }
 
 // ============================================================================
