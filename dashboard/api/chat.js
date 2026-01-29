@@ -11,13 +11,113 @@ const router = express.Router();
 let personaManager, vectorMemory, configManager;
 let chatHistory = [];
 
+// Validation constants
+const MAX_MESSAGE_LENGTH = 10000;
+const MAX_HISTORY_SIZE = 100;
+const ALLOWED_OPTIONS_KEYS = ['temperature', 'maxTokens', 'stream'];
+
+/**
+ * Validate and sanitize message input
+ * @param {any} message - The message to validate
+ * @returns {object} Validation result
+ */
+function validateMessage(message) {
+  // Check type
+  if (typeof message !== 'string') {
+    return { valid: false, error: 'Message must be a string' };
+  }
+
+  // Check empty
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return { valid: false, error: 'Message cannot be empty' };
+  }
+
+  // Check length
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return {
+      valid: false,
+      error: `Message exceeds maximum length of ${MAX_MESSAGE_LENGTH} characters`,
+    };
+  }
+
+  // Sanitize - remove control characters except newlines and tabs
+  const sanitized = message.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+
+  return { valid: true, sanitized };
+}
+
+/**
+ * Validate persona ID
+ * @param {any} personaId - The persona ID to validate
+ * @returns {boolean} Whether the ID is valid
+ */
+function validatePersonaId(personaId) {
+  if (personaId === undefined || personaId === null) return true; // Optional
+  if (typeof personaId !== 'string') return false;
+  // Allow alphanumeric, hyphens, and underscores
+  return /^[a-zA-Z0-9_-]+$/.test(personaId);
+}
+
+/**
+ * Validate options object
+ * @param {any} options - The options to validate
+ * @returns {object} Validation result with sanitized options
+ */
+function validateOptions(options) {
+  if (!options || typeof options !== 'object') {
+    return { valid: true, sanitized: {} };
+  }
+
+  const sanitized = {};
+
+  for (const key of ALLOWED_OPTIONS_KEYS) {
+    if (key in options) {
+      if (key === 'temperature' && typeof options[key] === 'number') {
+        sanitized[key] = Math.max(0, Math.min(2, options[key]));
+      } else if (key === 'maxTokens' && typeof options[key] === 'number') {
+        sanitized[key] = Math.max(1, Math.min(8192, Math.floor(options[key])));
+      } else if (key === 'stream' && typeof options[key] === 'boolean') {
+        sanitized[key] = options[key];
+      }
+    }
+  }
+
+  return { valid: true, sanitized };
+}
+
 async function loadModules() {
   if (personaManager) return;
   try {
-    const personaPath = path.join(__dirname, '..', '..', 'lib', 'personaManager.js');
-    const vectorPath = path.join(__dirname, '..', '..', 'lib', 'vectorMemory.js');
-    const configPath = path.join(__dirname, '..', '..', 'lib', 'configManager.js');
-    const agentPath = path.join(__dirname, '..', '..', 'agents', 'main', 'agent.js');
+    const personaPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'personaManager.js',
+    );
+    const vectorPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'vectorMemory.js',
+    );
+    const configPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'configManager.js',
+    );
+    const agentPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'agents',
+      'main',
+      'agent.js',
+    );
 
     const personaModule = await import(personaPath);
     personaManager = personaModule;
@@ -39,9 +139,25 @@ router.post('/', async (req, res) => {
 
     const { message, personaId, options = {} } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+    // Validate message
+    const messageValidation = validateMessage(message);
+    if (!messageValidation.valid) {
+      return res.status(400).json({ error: messageValidation.error });
     }
+
+    // Validate persona ID
+    if (!validatePersonaId(personaId)) {
+      return res.status(400).json({ error: 'Invalid persona ID format' });
+    }
+
+    // Validate options
+    const optionsValidation = validateOptions(options);
+    if (!optionsValidation.valid) {
+      return res.status(400).json({ error: 'Invalid options format' });
+    }
+
+    const sanitizedMessage = messageValidation.sanitized;
+    const sanitizedOptions = optionsValidation.sanitized;
 
     // Get active persona
     let activePersona;
@@ -55,10 +171,20 @@ router.post('/', async (req, res) => {
     // Search for relevant memories
     let context = '';
     try {
-      if (vectorMemory?.searchMemories && message.length > 10) {
-        const memories = await vectorMemory.searchMemories(message, { limit: 3, minScore: 0.2 });
+      if (vectorMemory?.searchMemories && sanitizedMessage.length > 10) {
+        const memories = await vectorMemory.searchMemories(sanitizedMessage, {
+          limit: 3,
+          minScore: 0.2,
+        });
         if (memories.length > 0) {
-          context = '\n\nRelevant memories:\n' + memories.map(m => `- ${m.content} (relevance: ${(m.score * 100).toFixed(0)}%)`).join('\n');
+          context =
+            '\n\nRelevant memories:\n' +
+            memories
+              .map(
+                (m) =>
+                  `- ${m.content} (relevance: ${(m.score * 100).toFixed(0)}%)`,
+              )
+              .join('\n');
         }
       }
     } catch (e) {}
@@ -74,15 +200,24 @@ router.post('/', async (req, res) => {
       systemPrompt += context;
     }
 
-    // Add to history
-    chatHistory.push({ role: 'user', content: message, timestamp: new Date().toISOString() });
+    // Add to history (with size limit)
+    chatHistory.push({
+      role: 'user',
+      content: sanitizedMessage,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Trim history if it exceeds max size
+    if (chatHistory.length > MAX_HISTORY_SIZE) {
+      chatHistory = chatHistory.slice(-MAX_HISTORY_SIZE);
+    }
 
     // Simple response generation (in production, would call Ollama)
     let responseText = '';
     let usedMemory = false;
 
     // Generate a response based on the message
-    const lowerMessage = message.toLowerCase();
+    const lowerMessage = sanitizedMessage.toLowerCase();
 
     if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
       responseText = `Hello! I'm ${activePersona?.name || 'Charlize'}, your AI assistant. How can I help you today?`;
@@ -90,25 +225,35 @@ router.post('/', async (req, res) => {
       responseText = `I can help you with:\n- Answering questions\n- Writing and debugging code\n- Managing tasks and schedules\n- Searching through memories\n- And much more!\n\nJust ask me anything.`;
     } else if (lowerMessage.includes('who are you')) {
       responseText = `I'm ${activePersona?.name || 'Charlize'}, an AI assistant powered by local Ollama models. I can help with coding, analysis, scheduling, memory management, and general tasks.\n\nI'm running on: ${configManager?.getConfig?.('ollama.baseUrl') || 'http://localhost:11434'}`;
-    } else if (lowerMessage.includes('remember') || lowerMessage.includes('store')) {
+    } else if (
+      lowerMessage.includes('remember') ||
+      lowerMessage.includes('store')
+    ) {
       // Store the message as a memory
       try {
         if (vectorMemory?.addMemory) {
-          await vectorMemory.addMemory(message, { type: 'conversation' });
-          responseText = "I've stored that information in my memory for future reference.";
+          await vectorMemory.addMemory(sanitizedMessage, {
+            type: 'conversation',
+          });
+          responseText =
+            "I've stored that information in my memory for future reference.";
           usedMemory = true;
         }
       } catch (e) {}
-    } else if (lowerMessage.includes('status') || lowerMessage.includes('how are you')) {
+    } else if (
+      lowerMessage.includes('status') ||
+      lowerMessage.includes('how are you')
+    ) {
       responseText = `I'm running smoothly! Here's a quick status:\n- Active Persona: ${activePersona?.name || 'Unknown'}\n- System: Online\n- Ready to assist you with any task.`;
     } else {
       // Default response
-      responseText = `I received your message: "${message}"\n\n${activePersona?.role ? `As ${activePersona.name} (${activePersona.role}), I'm here to help.` : 'I\'m here to help.'}\n\nIn a full implementation, this would call Ollama to generate a proper response.`;
+      responseText = `I received your message.\n\n${activePersona?.role ? `As ${activePersona.name} (${activePersona.role}), I'm here to help.` : "I'm here to help."}\n\nIn a full implementation, this would call Ollama to generate a proper response.`;
     }
 
     // Add context about stored memory
     if (usedMemory && context) {
-      responseText += '\n\nI also found some relevant memories that might be helpful.';
+      responseText +=
+        '\n\nI also found some relevant memories that might be helpful.';
     }
 
     // Add to history
@@ -116,7 +261,7 @@ router.post('/', async (req, res) => {
       role: 'assistant',
       content: responseText,
       timestamp: new Date().toISOString(),
-      persona: activePersona?.name
+      persona: activePersona?.name,
     });
 
     // Keep only last 50 messages
@@ -128,13 +273,13 @@ router.post('/', async (req, res) => {
     req.app.locals.broadcast?.('chatMessage', {
       user: message,
       assistant: responseText,
-      persona: activePersona?.name
+      persona: activePersona?.name,
     });
 
     res.json({
       response: responseText,
       persona: activePersona,
-      history: chatHistory.slice(-10)
+      history: chatHistory.slice(-10),
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -150,7 +295,7 @@ router.get('/history', async (req, res) => {
 
     res.json({
       history: chatHistory.slice(-parseInt(limit)),
-      total: chatHistory.length
+      total: chatHistory.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -177,7 +322,7 @@ router.get('/persona', async (req, res) => {
 
     res.json({
       active: activePersona,
-      available: Object.values(personas)
+      available: Object.values(personas),
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

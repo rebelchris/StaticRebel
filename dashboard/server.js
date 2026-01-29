@@ -7,6 +7,80 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
+// Security middleware - simple rate limiting implementation
+class RateLimiter {
+  constructor(windowMs = 15 * 60 * 1000, maxRequests = 100) {
+    this.windowMs = windowMs;
+    this.maxRequests = maxRequests;
+    this.requests = new Map();
+
+    // Cleanup old entries periodically
+    setInterval(() => this.cleanup(), windowMs);
+  }
+
+  cleanup() {
+    const now = Date.now();
+    for (const [key, data] of this.requests) {
+      if (now - data.resetTime > this.windowMs) {
+        this.requests.delete(key);
+      }
+    }
+  }
+
+  isAllowed(identifier) {
+    const now = Date.now();
+    let data = this.requests.get(identifier);
+
+    if (!data || now > data.resetTime) {
+      // New window
+      data = {
+        count: 1,
+        resetTime: now + this.windowMs,
+      };
+      this.requests.set(identifier, data);
+      return { allowed: true, remaining: this.maxRequests - 1 };
+    }
+
+    if (data.count >= this.maxRequests) {
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfter: Math.ceil((data.resetTime - now) / 1000),
+      };
+    }
+
+    data.count++;
+    return { allowed: true, remaining: this.maxRequests - data.count };
+  }
+}
+
+const rateLimiter = new RateLimiter(15 * 60 * 1000, 100); // 100 requests per 15 minutes
+
+// Rate limiting middleware
+function rateLimitMiddleware(req, res, next) {
+  // Get client identifier (IP or forwarded IP)
+  const identifier =
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress ||
+    'unknown';
+
+  const result = rateLimiter.isAllowed(identifier);
+
+  // Set rate limit headers
+  res.setHeader('X-RateLimit-Limit', 100);
+  res.setHeader('X-RateLimit-Remaining', Math.max(0, result.remaining));
+
+  if (!result.allowed) {
+    res.setHeader('Retry-After', result.retryAfter);
+    return res.status(429).json({
+      error: 'Too many requests',
+      message: `Rate limit exceeded. Try again in ${result.retryAfter} seconds.`,
+    });
+  }
+
+  next();
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -73,9 +147,39 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Security middleware
+// CORS - Restrict to allowed origins
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }),
+);
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Rate limiting for API routes
+app.use('/api/', rateLimitMiddleware);
+
+// Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
@@ -102,7 +206,11 @@ wss.on('connection', (ws) => {
 
 // Broadcast to all connected clients
 export function broadcast(type, data) {
-  const message = JSON.stringify({ type, data, timestamp: new Date().toISOString() });
+  const message = JSON.stringify({
+    type,
+    data,
+    timestamp: new Date().toISOString(),
+  });
   clients.forEach((client) => {
     if (client.readyState === 1) {
       client.send(message);
@@ -128,7 +236,7 @@ function getSystemStatus() {
     workers: { total: 0, pending: 0, running: 0, completed: 0 },
     connectors: { total: 0, active: 0 },
     models: { available: [], default: null },
-    uptime: process.uptime()
+    uptime: process.uptime(),
   };
 
   try {
@@ -136,7 +244,9 @@ function getSystemStatus() {
       status.personas.active = personaManager.getActivePersona();
     }
     if (personaManager?.getAvailablePersonas) {
-      status.personas.available = Object.keys(personaManager.getAvailablePersonas()).length;
+      status.personas.available = Object.keys(
+        personaManager.getAvailablePersonas(),
+      ).length;
     }
   } catch (e) {}
 
@@ -161,7 +271,9 @@ function getSystemStatus() {
   try {
     if (modelRegistry?.listAvailableModels) {
       status.models.available = modelRegistry.listAvailableModels() || [];
-      status.models.default = configManager?.getConfig?.('models.defaults.general') || 'ollama/llama3.2';
+      status.models.default =
+        configManager?.getConfig?.('models.defaults.general') ||
+        'ollama/llama3.2';
     }
   } catch (e) {}
 

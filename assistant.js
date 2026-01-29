@@ -1755,12 +1755,1067 @@ async function askWithMemory(userMessage, systemPrompt) {
 // ============================================================================
 
 /**
+ * Goals and targets system
+ */
+const GOALS_FILE = path.join(
+  os.homedir(),
+  '.static-rebel',
+  'goals.json'
+);
+
+function loadGoals() {
+  try {
+    if (fs.existsSync(GOALS_FILE)) {
+      return JSON.parse(fs.readFileSync(GOALS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return { goals: [] };
+}
+
+function saveGoals(goalsData) {
+  try {
+    const dir = path.dirname(GOALS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(GOALS_FILE, JSON.stringify(goalsData, null, 2));
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+/**
+ * Detects goal-setting statements in user input
+ */
+function detectGoalStatement(userInput) {
+  const goalPatterns = [
+    /i want to (hit|reach|achieve|get to|log) (\d+)/i,
+    /my goal is (\d+)/i,
+    /target of (\d+)/i,
+    /aim for (\d+)/i,
+    /trying to (hit|reach|get to) (\d+)/i
+  ];
+
+  return goalPatterns.some(pattern => pattern.test(userInput));
+}
+
+/**
+ * Parses goal from user input
+ */
+async function parseGoal(userInput, trackers) {
+  const prompt = `Extract the goal from this user statement:
+
+"${userInput}"
+
+Available trackers: ${trackers.map(t => `${t.name} (${t.type})`).join(', ')}
+
+Respond with ONLY valid JSON:
+{
+  "trackerType": "nutrition|workout|sleep|etc",
+  "metric": "calories|workouts|hours|etc",
+  "target": number,
+  "period": "daily|weekly|monthly",
+  "confidence": 0.0-1.0
+}
+
+Examples:
+- "I want to hit 2000 calories per day" -> {trackerType: "nutrition", metric: "calories", target: 2000, period: "daily", confidence: 0.95}
+- "my goal is 5 workouts per week" -> {trackerType: "workout", metric: "entries", target: 5, period: "weekly", confidence: 0.9}`;
+
+  try {
+    const response = await askOllama([
+      { role: 'system', content: 'You are a goal parser. Output only valid JSON.' },
+      { role: 'user', content: prompt }
+    ]);
+
+    const content = response.message?.content;
+    const parsed = JSON.parse(content.match(/\{[\s\S]*\}/)?.[0] || '{}');
+
+    if (parsed.confidence >= 0.7) {
+      return parsed;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Checks goal progress and generates updates
+ */
+function checkGoalProgress(goals, trackers, trackStore, queryEngine) {
+  const updates = [];
+
+  for (const goal of goals.goals) {
+    const tracker = trackers.find(t => t.type === goal.trackerType || t.name === goal.trackerName);
+    if (!tracker) continue;
+
+    let stats;
+    if (goal.period === 'daily') {
+      stats = queryEngine.getStats(tracker.name, 'today');
+    } else if (goal.period === 'weekly') {
+      stats = queryEngine.getStats(tracker.name, 'week');
+    } else if (goal.period === 'monthly') {
+      stats = queryEngine.getStats(tracker.name, 'month');
+    }
+
+    if (!stats || !stats.metrics) continue;
+
+    let current = 0;
+    if (goal.metric === 'entries') {
+      current = stats.records?.length || 0;
+    } else if (stats.metrics[goal.metric]) {
+      current = stats.metrics[goal.metric].total || 0;
+    }
+
+    const progress = Math.round((current / goal.target) * 100);
+    const remaining = goal.target - current;
+
+    updates.push({
+      goal,
+      tracker,
+      current,
+      target: goal.target,
+      progress,
+      remaining,
+      achieved: current >= goal.target,
+      period: goal.period
+    });
+  }
+
+  return updates;
+}
+
+/**
+ * Pattern recognition for predictions
+ */
+function analyzeUserPatterns(trackers, trackStore) {
+  const patterns = {
+    timePatterns: {},      // When user usually tracks
+    dayPatterns: {},       // Which days they track
+    frequencyPatterns: {}, // How often they track
+    valuePatterns: {}      // Common values/amounts
+  };
+
+  for (const tracker of trackers) {
+    const records = trackStore.getRecords(tracker.name).records || [];
+    if (records.length < 3) continue; // Need at least 3 entries for patterns
+
+    const trackerName = tracker.name;
+
+    // Analyze time patterns
+    const timesByHour = {};
+    const dayOfWeek = {};
+    const values = {};
+
+    for (const record of records) {
+      const date = new Date(record.timestamp);
+      const hour = date.getHours();
+      const day = date.getDay(); // 0=Sunday, 1=Monday, etc.
+
+      // Track hours
+      timesByHour[hour] = (timesByHour[hour] || 0) + 1;
+
+      // Track days
+      dayOfWeek[day] = (dayOfWeek[day] || 0) + 1;
+
+      // Track common values
+      if (record.data) {
+        for (const [key, value] of Object.entries(record.data)) {
+          if (typeof value === 'number') {
+            if (!values[key]) values[key] = [];
+            values[key].push(value);
+          }
+        }
+      }
+    }
+
+    // Find most common hour
+    const mostCommonHour = Object.entries(timesByHour)
+      .sort((a, b) => b[1] - a[1])[0];
+
+    if (mostCommonHour && mostCommonHour[1] >= 2) {
+      patterns.timePatterns[trackerName] = {
+        hour: parseInt(mostCommonHour[0]),
+        frequency: mostCommonHour[1],
+        total: records.length
+      };
+    }
+
+    // Find most common days
+    const mostCommonDays = Object.entries(dayOfWeek)
+      .filter(([day, count]) => count >= 2)
+      .map(([day, count]) => ({
+        day: parseInt(day),
+        dayName: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][parseInt(day)],
+        count
+      }));
+
+    if (mostCommonDays.length > 0) {
+      patterns.dayPatterns[trackerName] = mostCommonDays;
+    }
+
+    // Calculate typical values (averages)
+    for (const [key, vals] of Object.entries(values)) {
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      if (!patterns.valuePatterns[trackerName]) {
+        patterns.valuePatterns[trackerName] = {};
+      }
+      patterns.valuePatterns[trackerName][key] = {
+        average: Math.round(avg),
+        min: Math.min(...vals),
+        max: Math.max(...vals)
+      };
+    }
+  }
+
+  return patterns;
+}
+
+/**
+ * Generate predictions based on patterns
+ */
+function generatePredictions(patterns, trackers, trackStore) {
+  const predictions = [];
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentDay = now.getDay();
+
+  for (const tracker of trackers) {
+    const trackerName = tracker.name;
+
+    // Check if user usually logs at this time
+    const timePattern = patterns.timePatterns[trackerName];
+    if (timePattern && Math.abs(timePattern.hour - currentHour) <= 1) {
+      const records = trackStore.getRecords(trackerName).records || [];
+      const todayRecords = records.filter(r => {
+        const recordDate = new Date(r.timestamp).toDateString();
+        return recordDate === now.toDateString();
+      });
+
+      if (todayRecords.length === 0) {
+        predictions.push({
+          type: 'time_based',
+          tracker: tracker,
+          message: `You usually log ${tracker.displayName} around this time.`,
+          confidence: timePattern.frequency / timePattern.total,
+          priority: 'medium'
+        });
+      }
+    }
+
+    // Check if user usually logs on this day
+    const dayPattern = patterns.dayPatterns[trackerName];
+    if (dayPattern) {
+      const todayPattern = dayPattern.find(p => p.day === currentDay);
+      if (todayPattern) {
+        const records = trackStore.getRecords(trackerName).records || [];
+        const todayRecords = records.filter(r => {
+          const recordDate = new Date(r.timestamp).toDateString();
+          return recordDate === now.toDateString();
+        });
+
+        if (todayRecords.length === 0 && currentHour >= 12) {
+          predictions.push({
+            type: 'day_based',
+            tracker: tracker,
+            message: `It's ${todayPattern.dayName}! You usually track ${tracker.displayName} on ${todayPattern.dayName}s.`,
+            confidence: todayPattern.count / 10, // Arbitrary confidence
+            priority: 'low'
+          });
+        }
+      }
+    }
+  }
+
+  return predictions.slice(0, 2); // Top 2 predictions
+}
+
+/**
+ * Self-improvement learning log
+ */
+const LEARNING_LOG_FILE = path.join(
+  os.homedir(),
+  '.static-rebel',
+  'learning-log.json'
+);
+
+function loadLearningLog() {
+  try {
+    if (fs.existsSync(LEARNING_LOG_FILE)) {
+      return JSON.parse(fs.readFileSync(LEARNING_LOG_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return { lessons: [], stats: { corrections: 0, misclassifications: 0 } };
+}
+
+function saveLearningLog(log) {
+  try {
+    const dir = path.dirname(LEARNING_LOG_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(LEARNING_LOG_FILE, JSON.stringify(log, null, 2));
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+/**
+ * Records a learning opportunity when the system makes a mistake
+ */
+function recordLearning(type, context) {
+  try {
+    const log = loadLearningLog();
+
+    const lesson = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      type, // 'correction', 'misclassification', 'wrong_tracker', etc.
+      timestamp: Date.now(),
+      date: new Date().toISOString().split('T')[0],
+      ...context
+    };
+
+    log.lessons.push(lesson);
+    log.stats[type] = (log.stats[type] || 0) + 1;
+
+    // Keep only last 100 lessons
+    if (log.lessons.length > 100) {
+      log.lessons = log.lessons.slice(-100);
+    }
+
+    saveLearningLog(log);
+
+    if (VERBOSE) {
+      console.log(`  \x1b[90m[Learning recorded: ${type}]\x1b[0m`);
+    }
+
+    return lesson;
+  } catch (e) {
+    // Silently fail
+    return null;
+  }
+}
+
+/**
+ * Gets learning patterns to improve future classifications
+ */
+function getLearningPatterns(type) {
+  try {
+    const log = loadLearningLog();
+    const relevantLessons = log.lessons.filter(l => l.type === type);
+
+    // Build patterns from lessons
+    const patterns = {};
+    for (const lesson of relevantLessons) {
+      if (lesson.userInput && lesson.correctType) {
+        if (!patterns[lesson.correctType]) {
+          patterns[lesson.correctType] = [];
+        }
+        patterns[lesson.correctType].push(lesson.userInput);
+      }
+    }
+
+    return patterns;
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Generates proactive insights based on tracker data patterns
+ */
+function generateProactiveInsights(trackers, trackStore, queryEngine) {
+  const insights = [];
+
+  for (const tracker of trackers) {
+    const todayStats = queryEngine.getStats(tracker.name, 'today');
+    const weekStats = queryEngine.getStats(tracker.name, 'week');
+    const lastWeekStats = queryEngine.getStats(tracker.name, 'last-week');
+
+    const todayCount = todayStats.records?.length || 0;
+    const weekCount = weekStats.records?.length || 0;
+    const lastWeekCount = lastWeekStats.records?.length || 0;
+
+    // Insight: Streak detection
+    if (weekCount >= 5 && tracker.type === 'workout') {
+      insights.push({
+        type: 'streak',
+        message: `🔥 You've logged ${weekCount} workouts this week! Keep it up!`,
+        priority: 'high'
+      });
+    }
+
+    // Insight: Improvement
+    if (weekCount > lastWeekCount && lastWeekCount > 0) {
+      const improvement = ((weekCount - lastWeekCount) / lastWeekCount * 100).toFixed(0);
+      insights.push({
+        type: 'improvement',
+        message: `📈 ${improvement}% more ${tracker.type} entries than last week!`,
+        priority: 'medium'
+      });
+    }
+
+    // Insight: Consistency
+    if (weekCount >= 7 && tracker.type === 'habit') {
+      insights.push({
+        type: 'consistency',
+        message: `⭐ Perfect week! You logged your ${tracker.displayName} every day.`,
+        priority: 'high'
+      });
+    }
+
+    // Insight: Milestone
+    const allRecords = trackStore.getRecords(tracker.name).records || [];
+    const totalCount = allRecords.length;
+    if ([10, 25, 50, 100, 250, 500, 1000].includes(totalCount)) {
+      insights.push({
+        type: 'milestone',
+        message: `🎉 Milestone: ${totalCount} total entries in ${tracker.displayName}!`,
+        priority: 'high'
+      });
+    }
+
+    // Insight: Inactive tracker
+    if (allRecords.length > 0 && todayCount === 0 && weekCount === 0) {
+      const lastEntry = allRecords[allRecords.length - 1];
+      const daysSince = Math.floor((Date.now() - lastEntry.timestamp) / (1000 * 60 * 60 * 24));
+      if (daysSince >= 7 && daysSince < 30) {
+        insights.push({
+          type: 'inactive',
+          message: `⏰ It's been ${daysSince} days since your last ${tracker.displayName} entry.`,
+          priority: 'low'
+        });
+      }
+    }
+
+    // Insight: Goal tracking (if metrics have totals)
+    if (weekStats.metrics) {
+      for (const [metric, values] of Object.entries(weekStats.metrics)) {
+        if (values.total && metric === 'calories' && values.total > 10000) {
+          insights.push({
+            type: 'goal',
+            message: `💪 Over 10,000 calories tracked this week!`,
+            priority: 'medium'
+          });
+        }
+      }
+    }
+  }
+
+  // Sort by priority
+  const priorityOrder = { high: 3, medium: 2, low: 1 };
+  insights.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+
+  return insights.slice(0, 3); // Return top 3 insights
+}
+
+/**
+ * Generates smart suggestions based on patterns and goals
+ */
+function generateSmartSuggestions(trackers, trackStore, queryEngine, patterns, goals) {
+  const suggestions = [];
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  for (const tracker of trackers) {
+    const todayRecords = trackStore.getRecords(tracker.name).records?.filter(r => {
+      const recordDate = new Date(r.timestamp).toDateString();
+      return recordDate === now.toDateString();
+    }) || [];
+
+    // Suggestion: Haven't logged today but usually do
+    if (todayRecords.length === 0 && currentHour >= 12) {
+      const weekRecords = queryEngine.getStats(tracker.name, 'week').records || [];
+      if (weekRecords.length >= 3) {
+        suggestions.push({
+          type: 'missing_today',
+          message: `📝 You haven't logged ${tracker.displayName} today yet.`,
+          tracker: tracker,
+          priority: 'low'
+        });
+      }
+    }
+
+    // Suggestion: Goal progress
+    if (goals && goals.goals) {
+      const trackerGoals = goals.goals.filter(g =>
+        g.trackerType === tracker.type || g.trackerName === tracker.name
+      );
+
+      for (const goal of trackerGoals) {
+        const progress = checkGoalProgress({ goals: [goal] }, trackers, trackStore, queryEngine);
+        if (progress.length > 0) {
+          const goalProgress = progress[0];
+
+          if (goalProgress.progress >= 80 && goalProgress.progress < 100) {
+            suggestions.push({
+              type: 'goal_almost',
+              message: `🎯 Almost there! ${goalProgress.remaining} more ${goal.metric} to reach your ${goal.period} goal!`,
+              tracker: tracker,
+              priority: 'high'
+            });
+          } else if (goalProgress.achieved && goalProgress.progress === 100) {
+            suggestions.push({
+              type: 'goal_achieved',
+              message: `🎉 Goal achieved! You hit your ${goal.target} ${goal.metric} target for ${goal.period}!`,
+              tracker: tracker,
+              priority: 'high'
+            });
+          }
+        }
+      }
+    }
+
+    // Suggestion: Unusual pattern
+    if (patterns.valuePatterns && patterns.valuePatterns[tracker.name]) {
+      const valuePattern = patterns.valuePatterns[tracker.name];
+
+      for (const record of todayRecords) {
+        for (const [key, value] of Object.entries(record.data || {})) {
+          if (typeof value === 'number' && valuePattern[key]) {
+            const avg = valuePattern[key].average;
+            const deviation = Math.abs(value - avg) / avg;
+
+            if (deviation > 0.5) { // 50% deviation
+              const direction = value > avg ? 'higher' : 'lower';
+              suggestions.push({
+                type: 'unusual_value',
+                message: `📊 That ${key} (${value}) is ${direction} than your usual ${avg}.`,
+                tracker: tracker,
+                priority: 'low'
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Sort by priority
+  const priorityOrder = { high: 3, medium: 2, low: 1 };
+  suggestions.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+
+  return suggestions.slice(0, 2); // Top 2 suggestions
+}
+
+/**
+ * Shows proactive insights if any are available
+ */
+function showProactiveInsights(insights) {
+  if (insights.length === 0) return;
+
+  console.log('\n  \x1b[36m💡 Insights:\x1b[0m');
+  for (const insight of insights) {
+    console.log(`  ${insight.message}`);
+  }
+  console.log();
+}
+
+/**
+ * Shows smart suggestions
+ */
+function showSmartSuggestions(suggestions) {
+  if (suggestions.length === 0) return;
+
+  console.log('\n  \x1b[35m✨ Suggestions:\x1b[0m');
+  for (const suggestion of suggestions) {
+    console.log(`  ${suggestion.message}`);
+  }
+  console.log();
+}
+
+/**
+ * Detects action intents in LLM responses and executes them
+ * This simulates function calling by parsing LLM output for commands
+ */
+async function detectAndExecuteActionIntents(llmResponse, userInput) {
+  try {
+    const trackStore = new TrackerStore();
+    const queryEngine = new QueryEngine();
+    const trackers = trackStore.listTrackers();
+
+    if (trackers.length === 0) {
+      return null;
+    }
+
+    // Detect action patterns in LLM response
+    const actionPatterns = {
+      showStats: /let me (show|check|pull up|get) (your|the|those)? ?(stats|statistics|numbers|data)/i,
+      showHistory: /let me (show|check|pull up|get|display) (your|the)? ?(history|log|entries|records)/i,
+      compareData: /let me compare|i'll compare|comparing/i,
+      createTracker: /let me create|i'll create|creating a tracker/i
+    };
+
+    let detectedAction = null;
+    for (const [action, pattern] of Object.entries(actionPatterns)) {
+      if (pattern.test(llmResponse)) {
+        detectedAction = action;
+        break;
+      }
+    }
+
+    if (!detectedAction) {
+      return null;
+    }
+
+    // Use Ollama to extract details about what the LLM wants to do
+    const extractPrompt = `The AI assistant said: "${llmResponse}"
+
+This suggests executing an action. Extract what action should be performed:
+
+Respond with ONLY valid JSON:
+{
+  "action": "stats|history|compare|create",
+  "trackerType": "nutrition|workout|sleep|etc or null",
+  "period": "today|week|month|etc or null",
+  "confidence": 0.0-1.0
+}`;
+
+    const extractResponse = await askOllama([
+      { role: 'system', content: 'You are an action intent parser. Output only valid JSON.' },
+      { role: 'user', content: extractPrompt }
+    ]);
+
+    const extractContent = extractResponse.message?.content;
+    const intent = JSON.parse(extractContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+
+    if (intent.confidence < 0.6) {
+      return null;
+    }
+
+    // Find the relevant tracker
+    let targetTracker = null;
+    if (intent.trackerType) {
+      targetTracker = findMatchingTracker(trackers, intent.trackerType);
+    } else {
+      // Try to infer from user input
+      for (const tracker of trackers) {
+        if (userInput.toLowerCase().includes(tracker.name) ||
+            userInput.toLowerCase().includes(tracker.type)) {
+          targetTracker = tracker;
+          break;
+        }
+      }
+    }
+
+    if (!targetTracker && trackers.length === 1) {
+      targetTracker = trackers[0]; // Use the only tracker available
+    }
+
+    if (!targetTracker) {
+      return null;
+    }
+
+    // Execute the action
+    let result = null;
+    if (intent.action === 'stats' || detectedAction === 'showStats') {
+      const period = intent.period || 'week';
+      const stats = queryEngine.getStats(targetTracker.name, period);
+      result = queryEngine.formatStats(stats);
+      console.log('\n' + result);
+    } else if (intent.action === 'history' || detectedAction === 'showHistory') {
+      const records = trackStore.getRecentRecords(targetTracker.name, 10);
+      result = queryEngine.formatHistory(records);
+      console.log('\n' + result);
+    }
+
+    if (result) {
+      return {
+        action: intent.action || detectedAction,
+        tracker: targetTracker,
+        executed: true
+      };
+    }
+
+    return null;
+  } catch (e) {
+    if (VERBOSE) {
+      console.log(`  \x1b[90m[Action intent error: ${e.message}]\x1b[0m`);
+    }
+    return null;
+  }
+}
+
+/**
+ * Routes natural language queries to tracker commands
+ */
+async function routeNaturalLanguageQuery(userInput) {
+  try {
+    const trackStore = new TrackerStore();
+    const queryEngine = new QueryEngine();
+    const trackers = trackStore.listTrackers();
+
+    if (trackers.length === 0) {
+      return null; // No trackers to query
+    }
+
+    // Detect query patterns
+    const queryPatterns = {
+      history: /show (me )?(my )?|list (my )?|what (are|were|was|is) (my )?|view (my )?/i,
+      stats: /how many|how much|total|average|sum of|stats|statistics/i,
+      compare: /compare|versus|vs\.?|difference between/i,
+      last: /last (entry|time|one)|most recent|latest/i
+    };
+
+    let queryType = null;
+    for (const [type, pattern] of Object.entries(queryPatterns)) {
+      if (pattern.test(userInput)) {
+        queryType = type;
+        break;
+      }
+    }
+
+    if (!queryType) {
+      return null; // Not a recognized query
+    }
+
+    // Use Ollama to extract which tracker and time period
+    const extractPrompt = `Extract the tracker type and time period from this query:
+
+"${userInput}"
+
+Available trackers: ${trackers.map(t => `${t.name} (${t.type})`).join(', ')}
+
+Respond with ONLY valid JSON:
+{
+  "trackerName": "tracker_name or null",
+  "trackerType": "nutrition|workout|sleep|etc or null",
+  "period": "today|week|month|this-week|last-week|yesterday|null",
+  "confidence": 0.0-1.0
+}
+
+Examples:
+- "show me my workouts this week" -> {trackerName: null, trackerType: "workout", period: "this-week", confidence: 0.9}
+- "how many calories today" -> {trackerName: null, trackerType: "nutrition", period: "today", confidence: 0.95}
+- "what was my last run" -> {trackerName: null, trackerType: "workout", period: null, confidence: 0.85}`;
+
+    const extractResponse = await askOllama([
+      { role: 'system', content: 'You are a query parser. Output only valid JSON.' },
+      { role: 'user', content: extractPrompt }
+    ]);
+
+    const extractContent = extractResponse.message?.content;
+    const extracted = JSON.parse(extractContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+
+    if (extracted.confidence < 0.6) {
+      return null;
+    }
+
+    // Find the tracker
+    let targetTracker = null;
+    if (extracted.trackerName) {
+      targetTracker = trackStore.getTracker(extracted.trackerName);
+    } else if (extracted.trackerType) {
+      targetTracker = findMatchingTracker(trackers, extracted.trackerType);
+    }
+
+    if (!targetTracker) {
+      return null;
+    }
+
+    // Execute the query
+    let result = null;
+    if (queryType === 'history') {
+      const records = trackStore.getRecentRecords(targetTracker.name, 10);
+      result = queryEngine.formatHistory(records);
+    } else if (queryType === 'stats') {
+      const period = extracted.period || 'week';
+      const stats = queryEngine.getStats(targetTracker.name, period);
+      result = queryEngine.formatStats(stats);
+    } else if (queryType === 'last') {
+      const records = trackStore.getRecords(targetTracker.name);
+      const recentRecords = records.records || records;
+      if (recentRecords.length > 0) {
+        const last = recentRecords[recentRecords.length - 1];
+        result = `\n  Last entry (${last.date}):\n  ${JSON.stringify(last.data, null, 2)}\n`;
+      } else {
+        result = '\n  No entries yet.\n';
+      }
+    }
+
+    if (result) {
+      console.log(result);
+      return {
+        tracker: targetTracker,
+        queryType,
+        executed: true
+      };
+    }
+
+    return null;
+  } catch (e) {
+    if (VERBOSE) {
+      console.log(`  \x1b[90m[Query routing error: ${e.message}]\x1b[0m`);
+    }
+    return null;
+  }
+}
+
+/**
+ * Finds a tracker that matches the given type, including synonyms
+ */
+function findMatchingTracker(trackers, targetType) {
+  // Define tracker type synonyms
+  const typeSynonyms = {
+    nutrition: ['food', 'diet', 'eating', 'meal', 'calories', 'snack', 'drink'],
+    workout: ['exercise', 'fitness', 'training', 'gym', 'activity', 'sport'],
+    sleep: ['rest', 'nap', 'bedtime', 'insomnia'],
+    habit: ['routine', 'practice', 'daily', 'streak'],
+    mood: ['emotion', 'feeling', 'mental', 'wellbeing'],
+    hydration: ['water', 'fluid', 'drink'],
+    medication: ['med', 'pill', 'supplement', 'vitamin', 'drug'],
+    weight: ['body', 'scale', 'mass'],
+    finance: ['money', 'budget', 'expense', 'spending'],
+    productivity: ['task', 'todo', 'work', 'focus']
+  };
+
+  // First, try exact type match
+  let match = trackers.find(t => t.type === targetType);
+  if (match) return match;
+
+  // Then try synonym matching
+  for (const [mainType, synonyms] of Object.entries(typeSynonyms)) {
+    if (targetType === mainType || synonyms.includes(targetType)) {
+      // Check if any tracker matches this type or its synonyms
+      match = trackers.find(t =>
+        t.type === mainType ||
+        synonyms.includes(t.type) ||
+        t.name.toLowerCase().includes(mainType) ||
+        synonyms.some(syn => t.name.toLowerCase().includes(syn))
+      );
+      if (match) return match;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Detects undo/delete statements
+ */
+function detectUndo(userInput) {
+  const undoPatterns = [
+    /forget (that|the last one|last entry|that last one)/i,
+    /undo (that|last|the last one)/i,
+    /delete (that|the last one|last entry)/i,
+    /remove (that|the last one|last entry)/i,
+    /cancel (that|the last one)/i,
+    /nevermind|never mind/i,
+    /scratch that/i
+  ];
+
+  return undoPatterns.some(pattern => pattern.test(userInput));
+}
+
+/**
+ * Handles undo by deleting the most recent entry
+ */
+function handleUndo(trackers, trackStore) {
+  // Find most recently updated tracker
+  const recentTracker = trackers.sort((a, b) => {
+    const aRecords = trackStore.getRecords(a.name).records || [];
+    const bRecords = trackStore.getRecords(b.name).records || [];
+    const aLast = aRecords.length > 0 ? aRecords[aRecords.length - 1].timestamp : 0;
+    const bLast = bRecords.length > 0 ? bRecords[bRecords.length - 1].timestamp : 0;
+    return bLast - aLast;
+  })[0];
+
+  if (!recentTracker) {
+    return null;
+  }
+
+  const records = trackStore.getRecords(recentTracker.name);
+  const allRecords = records.records || [];
+
+  if (allRecords.length === 0) {
+    return null;
+  }
+
+  const lastRecord = allRecords[allRecords.length - 1];
+
+  // Delete the last record
+  const updatedRecords = allRecords.filter(r => r.id !== lastRecord.id);
+  records.records = updatedRecords;
+
+  // Save back
+  const recordsFile = path.join(
+    os.homedir(),
+    '.static-rebel',
+    'trackers',
+    recentTracker.name,
+    'records.json'
+  );
+
+  try {
+    fs.writeFileSync(recordsFile, JSON.stringify(records, null, 2));
+    return {
+      tracker: recentTracker,
+      deletedEntry: lastRecord
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Detects if user input is a correction to a previous entry
+ */
+function detectCorrection(userInput) {
+  const correctionPatterns = [
+    /actually|correction|meant to say|i mean|no wait|oops|my bad/i,
+    /\*|fix:|edit:|change:|update:/i,
+    /it was (\d+) not (\d+)/i,
+    /should be|should have been/i,
+    /wrong|mistake|incorrect/i
+  ];
+
+  return correctionPatterns.some(pattern => pattern.test(userInput));
+}
+
+/**
+ * Extracts time information from user input
+ */
+function parseTimeFromInput(userInput) {
+  const timePatterns = [
+    // Specific times
+    { pattern: /at (\d{1,2}):(\d{2})\s*(am|pm)?/i, type: 'specific' },
+    { pattern: /at (\d{1,2})\s*(am|pm)/i, type: 'hour' },
+
+    // Relative times
+    { pattern: /(\d+)\s*(hour|hr|hours|hrs)\s*ago/i, type: 'hours_ago' },
+    { pattern: /(\d+)\s*(minute|min|minutes|mins)\s*ago/i, type: 'minutes_ago' },
+
+    // Time of day
+    { pattern: /this morning|in the morning/i, type: 'morning' },
+    { pattern: /this afternoon|in the afternoon/i, type: 'afternoon' },
+    { pattern: /this evening|in the evening/i, type: 'evening' },
+    { pattern: /tonight|at night/i, type: 'night' },
+
+    // Earlier today
+    { pattern: /earlier today|earlier/i, type: 'earlier' },
+    { pattern: /just now|right now/i, type: 'now' }
+  ];
+
+  for (const { pattern, type } of timePatterns) {
+    const match = userInput.match(pattern);
+    if (match) {
+      const now = new Date();
+
+      switch (type) {
+        case 'specific':
+          let hour = parseInt(match[1]);
+          const minute = parseInt(match[2]);
+          const ampm = match[3]?.toLowerCase();
+
+          if (ampm === 'pm' && hour < 12) hour += 12;
+          if (ampm === 'am' && hour === 12) hour = 0;
+
+          const specificTime = new Date(now);
+          specificTime.setHours(hour, minute, 0, 0);
+          return specificTime.getTime();
+
+        case 'hour':
+          let hourOnly = parseInt(match[1]);
+          const ampmOnly = match[2].toLowerCase();
+
+          if (ampmOnly === 'pm' && hourOnly < 12) hourOnly += 12;
+          if (ampmOnly === 'am' && hourOnly === 12) hourOnly = 0;
+
+          const hourTime = new Date(now);
+          hourTime.setHours(hourOnly, 0, 0, 0);
+          return hourTime.getTime();
+
+        case 'hours_ago':
+          const hoursAgo = parseInt(match[1]);
+          return now.getTime() - (hoursAgo * 60 * 60 * 1000);
+
+        case 'minutes_ago':
+          const minutesAgo = parseInt(match[1]);
+          return now.getTime() - (minutesAgo * 60 * 1000);
+
+        case 'morning':
+          const morning = new Date(now);
+          morning.setHours(8, 0, 0, 0);
+          return morning.getTime();
+
+        case 'afternoon':
+          const afternoon = new Date(now);
+          afternoon.setHours(14, 0, 0, 0);
+          return afternoon.getTime();
+
+        case 'evening':
+          const evening = new Date(now);
+          evening.setHours(18, 0, 0, 0);
+          return evening.getTime();
+
+        case 'night':
+          const night = new Date(now);
+          night.setHours(21, 0, 0, 0);
+          return night.getTime();
+
+        case 'earlier':
+          // 2 hours ago as default for "earlier"
+          return now.getTime() - (2 * 60 * 60 * 1000);
+
+        case 'now':
+          return now.getTime();
+      }
+    }
+  }
+
+  return null; // No time specified, use current time
+}
+
+/**
+ * Extracts correction data from user input
+ */
+async function parseCorrection(userInput, trackerType) {
+  const prompt = `The user is correcting a previous entry. Extract what they want to change:
+
+"${userInput}"
+
+Respond with ONLY valid JSON:
+{
+  "field": "field_name_to_change",
+  "value": new_value,
+  "confidence": 0.0-1.0
+}
+
+Examples:
+- "actually it was 200 calories" -> {field: "calories", value: 200, confidence: 0.9}
+- "the weight was 185 not 175" -> {field: "weight", value: 185, confidence: 0.95}
+- "fix: 8 reps not 10" -> {field: "reps", value: 8, confidence: 0.9}`;
+
+  try {
+    const response = await askOllama([
+      { role: 'system', content: 'You are a correction parser. Output only valid JSON.' },
+      { role: 'user', content: prompt }
+    ]);
+
+    const content = response.message?.content;
+    const parsed = JSON.parse(content.match(/\{[\s\S]*\}/)?.[0] || '{}');
+
+    if (parsed.confidence >= 0.7) {
+      return parsed;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Detects trackable data in user input and automatically:
  * 1. Identifies if the message contains trackable information
  * 2. Infers what type of tracker is needed
  * 3. Checks if a suitable tracker exists
  * 4. Auto-creates one if missing
- * 5. Logs the data
+ * 5. Logs the data (or corrects if it's a correction)
  */
 async function detectAndRouteTrackableData(userInput) {
   try {
@@ -1768,6 +2823,70 @@ async function detectAndRouteTrackableData(userInput) {
     const isQuestion = /\?|^(how|what|when|where|why|who|which|can you|could you|would you|do you|does|is|are|will|show me|tell me)/i.test(userInput);
     if (isQuestion || userInput.startsWith('/') || userInput.startsWith('@')) {
       return null;
+    }
+
+    const trackStore = new TrackerStore();
+    const trackers = trackStore.listTrackers();
+
+    // Check if this is an undo/delete request
+    if (detectUndo(userInput) && trackers.length > 0) {
+      const undoResult = handleUndo(trackers, trackStore);
+      if (undoResult) {
+        console.log(`  \x1b[31m[Deleted last entry from @${undoResult.tracker.name}]\x1b[0m`);
+        return {
+          tracker: undoResult.tracker,
+          data: undoResult.deletedEntry.data,
+          undone: true
+        };
+      }
+    }
+
+    // Check if this is a correction to a previous entry
+    if (detectCorrection(userInput) && trackers.length > 0) {
+      // Find the most recently updated tracker
+      const recentTracker = trackers.sort((a, b) => {
+        const aRecords = trackStore.getRecords(a.name).records || [];
+        const bRecords = trackStore.getRecords(b.name).records || [];
+        const aLast = aRecords.length > 0 ? aRecords[aRecords.length - 1].timestamp : 0;
+        const bLast = bRecords.length > 0 ? bRecords[bRecords.length - 1].timestamp : 0;
+        return bLast - aLast;
+      })[0];
+
+      if (recentTracker) {
+        const records = trackStore.getRecords(recentTracker.name).records || [];
+        if (records.length > 0) {
+          const lastRecord = records[records.length - 1];
+
+          // Parse the correction
+          const correction = await parseCorrection(userInput, recentTracker.type);
+
+          if (correction && correction.field) {
+            const newData = { [correction.field]: correction.value };
+            const result = trackStore.updateRecord(recentTracker.name, lastRecord.id, newData);
+
+            if (result.success) {
+              console.log(`  \x1b[33m[Corrected @${recentTracker.name}: ${correction.field}=${correction.value}]\x1b[0m`);
+
+              // Record learning: user had to correct something
+              recordLearning('correction', {
+                userInput: userInput,
+                previousValue: lastRecord.data[correction.field],
+                correctedValue: correction.value,
+                field: correction.field,
+                trackerType: recentTracker.type
+              });
+
+              return {
+                tracker: recentTracker,
+                data: result.record.data,
+                corrected: true,
+                field: correction.field,
+                value: correction.value
+              };
+            }
+          }
+        }
+      }
     }
 
     // Step 1: Use Ollama to detect if this contains trackable data
@@ -1802,15 +2921,9 @@ Examples:
       return null;
     }
 
-    const trackStore = new TrackerStore();
-    const trackers = trackStore.listTrackers();
-
-    // Step 2: Check if a suitable tracker already exists
-    const matchingTracker = trackers.find(t =>
-      t.type === detection.trackerType ||
-      (detection.trackerType === 'nutrition' && (t.type === 'food' || t.type === 'nutrition')) ||
-      (detection.trackerType === 'workout' && t.type === 'workout')
-    );
+    // Step 2: Check if a suitable tracker already exists (using smart matching)
+    // Note: trackStore and trackers are already declared at the top of this function
+    const matchingTracker = findMatchingTracker(trackers, detection.trackerType);
 
     let targetTracker = matchingTracker;
 
@@ -1844,10 +2957,19 @@ Examples:
       return null;
     }
 
-    const result = trackStore.addRecord(targetTracker.name, {
+    // Extract time from input if specified
+    const customTimestamp = parseTimeFromInput(userInput);
+    const recordData = {
       data: parsed.data,
       source: 'auto-detect'
-    });
+    };
+
+    // Add custom timestamp if found
+    if (customTimestamp) {
+      recordData.timestamp = customTimestamp;
+    }
+
+    const result = trackStore.addRecord(targetTracker.name, recordData);
 
     if (result.success) {
       console.log(`  \x1b[36m[Logged to @${targetTracker.name}]\x1b[0m`);
@@ -3854,6 +4976,57 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
             effectiveSystemPrompt += `\n\n<IMPORTANT: WEB SEARCH RESULTS>\n${searchContext}\n\nYou MUST use these search results to answer the user's question. If the search results don't contain relevant information, say so explicitly. DO NOT fabricate articles, titles, or information that isn't in these results.\n</IMPORTANT: WEB SEARCH RESULTS>`;
           }
 
+          // CRITICAL: Check for natural language queries FIRST (e.g., "show me my workouts")
+          let queryResult = null;
+          try {
+            queryResult = await routeNaturalLanguageQuery(q);
+          } catch (e) {
+            if (VERBOSE) {
+              console.log(`  \x1b[90m[Query routing error: ${e.message}]\x1b[0m`);
+            }
+          }
+
+          // If a query was executed, skip normal tracking and tell LLM what happened
+          if (queryResult && queryResult.executed) {
+            effectiveSystemPrompt += `\n\n<SYSTEM_ACTION_COMPLETED>\nThe system has automatically executed a ${queryResult.queryType} query for @${queryResult.tracker.name} and displayed the results above.\n\nYou should provide a brief, natural summary or comment about the data shown. Don't repeat the numbers - just add context or insight.\n</SYSTEM_ACTION_COMPLETED>`;
+          }
+
+          // CRITICAL: Run auto-tracking BEFORE LLM responds so it knows what actually happened
+          // Skip if we already executed a query
+          let trackingResult = null;
+          if (!queryResult) {
+            try {
+              trackingResult = await detectAndRouteTrackableData(q);
+            } catch (e) {
+              // Silently fail - don't disrupt the conversation
+              if (VERBOSE) {
+                console.log(`  \x1b[90m[Auto-track error: ${e.message}]\x1b[0m`);
+              }
+            }
+          }
+
+          // If tracking happened, add it to the context so LLM knows about it
+          if (trackingResult) {
+            let actionSummary;
+            let actionVerb = 'tracked';
+
+            if (trackingResult.undone) {
+              actionSummary = `Deleted last entry from @${trackingResult.tracker.name}`;
+              actionVerb = 'deleted';
+            } else if (trackingResult.corrected) {
+              actionSummary = `Corrected @${trackingResult.tracker.name}: ${trackingResult.field}=${trackingResult.value}`;
+              actionVerb = 'corrected';
+            } else if (trackingResult.created) {
+              actionSummary = `Created new tracker @${trackingResult.tracker.name} and logged`;
+              actionVerb = 'created and tracked';
+            } else {
+              actionSummary = `Logged to @${trackingResult.tracker.name}`;
+              actionVerb = 'tracked';
+            }
+
+            effectiveSystemPrompt += `\n\n<SYSTEM_ACTION_COMPLETED>\nThe system has automatically ${actionSummary}: ${JSON.stringify(trackingResult.data)}\n\nYou should acknowledge this naturally without repeating the technical details. The user's data has been successfully ${actionVerb}.\n</SYSTEM_ACTION_COMPLETED>`;
+          }
+
           const startTime = Date.now();
           const { response } = await askWithMemory(
             effectiveQuery,
@@ -3864,6 +5037,19 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           console.log(formatMessage(answer));
           console.log(`\n  \x1b[90m(${elapsed}s)\x1b[0m\n`);
+
+          // EXPERIMENTAL: Detect if LLM suggested an action and execute it
+          try {
+            const actionIntent = await detectAndExecuteActionIntents(answer, q);
+            if (actionIntent && actionIntent.executed) {
+              console.log(`  \x1b[90m[Auto-executed: ${actionIntent.action} for @${actionIntent.tracker.name}]\x1b[0m\n`);
+            }
+          } catch (e) {
+            // Silently fail
+            if (VERBOSE) {
+              console.log(`  \x1b[90m[Action intent error: ${e.message}]\x1b[0m`);
+            }
+          }
 
           // Show search sources if we searched
           if (searchResults.length > 0) {
@@ -3900,17 +5086,27 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
             reactToEvent('memory_stored');
           }
 
-          // Intelligent auto-tracking for any trackable data
-          try {
-            const trackingResult = await detectAndRouteTrackableData(q);
-            if (trackingResult) {
-              if (trackingResult.tracker.type === 'workout') {
-                reactToEvent('workout_logged');
-              }
-              // You can add more event reactions based on tracker type
+          // Trigger events based on tracking result (tracking already happened before response)
+          if (trackingResult) {
+            if (trackingResult.tracker.type === 'workout') {
+              reactToEvent('workout_logged');
             }
-          } catch (e) {
-            // Silently fail - don't disrupt the conversation
+            // You can add more event reactions based on tracker type
+
+            // Generate and show proactive insights after logging
+            try {
+              const trackStore = new TrackerStore();
+              const queryEngine = new QueryEngine();
+              const trackers = trackStore.listTrackers();
+              const insights = generateProactiveInsights(trackers, trackStore, queryEngine);
+
+              // Show insights occasionally (20% chance to avoid being annoying)
+              if (insights.length > 0 && Math.random() < 0.2) {
+                showProactiveInsights(insights);
+              }
+            } catch (e) {
+              // Silently fail
+            }
           }
         }
       } catch (error) {
