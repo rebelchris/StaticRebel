@@ -805,6 +805,16 @@ async function logToTracker(tracker, input, store) {
       } else if (tracker.type === 'workout') {
         parsed = { success: true, data: parseWorkoutHeuristic(input) };
       }
+    } else if (parsed.success && (tracker.type === 'nutrition' || tracker.type === 'food')) {
+      // For nutrition, merge heuristic estimates if calories are missing
+      if (!parsed.data.calories) {
+        console.log(`[Tracker] LLM didn't extract calories, trying heuristic estimates...`);
+        const heuristicData = parseFoodHeuristic(input);
+        // Merge heuristic calories into LLM-parsed data
+        if (heuristicData.calories) {
+          parsed.data.calories = heuristicData.calories;
+        }
+      }
     }
 
     if (!parsed.success || Object.keys(parsed.data).length === 0) {
