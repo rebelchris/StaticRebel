@@ -21,10 +21,13 @@ class ToastManager {
     toast.className = `toast toast-${type}`;
 
     const icons = {
-      success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>',
-      error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
-      warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/></svg>',
-      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+      success:
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>',
+      error:
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
+      warning:
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/></svg>',
+      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
     };
 
     toast.innerHTML = `
@@ -66,7 +69,7 @@ export const format = {
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
   },
 
@@ -77,7 +80,7 @@ export const format = {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   },
 
@@ -107,13 +110,24 @@ export const format = {
     return `${mins}m`;
   },
 
+  // Format duration in milliseconds to human readable
+  duration: (ms) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  },
+
   number: (num) => {
     return new Intl.NumberFormat().format(num);
   },
 
   percent: (value, decimals = 1) => {
     return `${(value * 100).toFixed(decimals)}%`;
-  }
+  },
 };
 
 // Active navigation highlighting
@@ -121,7 +135,7 @@ export function setActiveNav() {
   const path = window.location.pathname;
   const navLinks = document.querySelectorAll('.sidebar-nav a');
 
-  navLinks.forEach(link => {
+  navLinks.forEach((link) => {
     const href = link.getAttribute('href');
     if (path === href || (path.startsWith(href) && href !== '/')) {
       link.classList.add('active');
@@ -150,7 +164,7 @@ export function closeModal(modalId) {
 
 export function initModals() {
   // Close modal on overlay click
-  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  document.querySelectorAll('.modal-overlay').forEach((overlay) => {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         overlay.classList.remove('active');
@@ -162,7 +176,7 @@ export function initModals() {
   // Close modal on Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      document.querySelectorAll('.modal-overlay.active').forEach(modal => {
+      document.querySelectorAll('.modal-overlay.active').forEach((modal) => {
         modal.classList.remove('active');
         document.body.style.overflow = '';
       });
@@ -204,7 +218,7 @@ export function getStatusClass(status) {
     failed: 'badge-danger',
     cancelled: 'badge-danger',
     inactive: 'badge-danger',
-    offline: 'badge-danger'
+    offline: 'badge-danger',
   };
   return classes[status] || 'badge-primary';
 }
@@ -215,7 +229,7 @@ export function getPriorityClass(priority) {
     urgent: 'badge-danger',
     high: 'badge-warning',
     normal: 'badge-primary',
-    low: 'badge-info'
+    low: 'badge-info',
   };
   return classes[priority] || 'badge-primary';
 }
@@ -265,12 +279,17 @@ export function handleApiError(error, fallback = 'An error occurred') {
 
 // Generate ID
 export function generateId(length = 8) {
-  return Math.random().toString(36).substring(2, 2 + length);
+  return Math.random()
+    .toString(36)
+    .substring(2, 2 + length);
 }
 
 // Export data
 export function downloadData(data, filename, type = 'application/json') {
-  const blob = new Blob([typeof data === 'string' ? data : JSON.stringify(data, null, 2)], { type });
+  const blob = new Blob(
+    [typeof data === 'string' ? data : JSON.stringify(data, null, 2)],
+    { type },
+  );
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

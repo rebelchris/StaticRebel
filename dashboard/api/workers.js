@@ -13,7 +13,13 @@ let workerManager;
 async function loadModules() {
   if (workerManager) return;
   try {
-    const workerPath = path.join(__dirname, '..', '..', 'lib', 'workerManager.js');
+    const workerPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'workerManager.js',
+    );
     const module = await import(workerPath);
     workerManager = module;
   } catch (error) {
@@ -68,7 +74,13 @@ router.get('/stats', async (req, res) => {
     await loadModules();
 
     if (!workerManager?.getWorkerStats) {
-      return res.json({ totalTasks: 0, pending: 0, running: 0, completed: 0, failed: 0 });
+      return res.json({
+        totalTasks: 0,
+        pending: 0,
+        running: 0,
+        completed: 0,
+        failed: 0,
+      });
     }
 
     const stats = workerManager.getWorkerStats();
@@ -83,7 +95,13 @@ router.post('/', async (req, res) => {
   try {
     await loadModules();
 
-    const { name, type = 'general', payload = {}, priority = 'normal', subtasks = [] } = req.body;
+    const {
+      name,
+      type = 'general',
+      payload = {},
+      priority = 'normal',
+      subtasks = [],
+    } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Task name is required' });
@@ -98,7 +116,7 @@ router.post('/', async (req, res) => {
       type,
       payload,
       priority,
-      subtasks
+      subtasks,
     });
 
     req.app.locals.broadcast?.('taskCreated', { task });
@@ -164,14 +182,20 @@ router.post('/todo', async (req, res) => {
     const { projectName, subtasks, options = {} } = req.body;
 
     if (!projectName || !subtasks || subtasks.length === 0) {
-      return res.status(400).json({ error: 'Project name and subtasks are required' });
+      return res
+        .status(400)
+        .json({ error: 'Project name and subtasks are required' });
     }
 
     if (!workerManager?.generateTodoMd) {
       return res.status(500).json({ error: 'Worker system not available' });
     }
 
-    const content = workerManager.generateTodoMd(projectName, subtasks, options);
+    const content = workerManager.generateTodoMd(
+      projectName,
+      subtasks,
+      options,
+    );
     res.json({ content });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -211,6 +235,71 @@ router.get('/filter/:status', async (req, res) => {
 
     const tasks = workerManager.getTasksByStatus(status);
     res.json({ tasks });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get active workers (real-time worker thread info)
+router.get('/active', async (req, res) => {
+  try {
+    await loadModules();
+
+    if (!workerManager?.getActiveWorkers) {
+      return res.json({ workers: [] });
+    }
+
+    const workers = workerManager.getActiveWorkers();
+    res.json({ workers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get specific active worker details
+router.get('/active/:id', async (req, res) => {
+  try {
+    await loadModules();
+
+    const { id } = req.params;
+
+    if (!workerManager?.getActiveWorker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    const worker = workerManager.getActiveWorker(id);
+
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
+    res.json({ worker });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Terminate a running worker
+router.post('/:id/terminate', async (req, res) => {
+  try {
+    await loadModules();
+
+    const { id } = req.params;
+
+    if (!workerManager?.terminateWorker) {
+      return res
+        .status(500)
+        .json({ error: 'Worker termination not available' });
+    }
+
+    const result = workerManager.terminateWorker(id);
+
+    if (result.success) {
+      req.app.locals.broadcast?.('workerTerminated', { taskId: id });
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

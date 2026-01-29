@@ -17,8 +17,8 @@ class ApiClient {
     const options = {
       method,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     };
 
     if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
@@ -119,7 +119,7 @@ class ApiClient {
 
   emit(event, data) {
     if (this.wsCallbacks.has(event)) {
-      this.wsCallbacks.get(event).forEach(callback => callback(data));
+      this.wsCallbacks.get(event).forEach((callback) => callback(data));
     }
   }
 
@@ -134,7 +134,7 @@ class ApiClient {
 // Status API
 export const statusApi = {
   getStatus: () => api.get('/status'),
-  getOverview: () => api.get('/status/overview')
+  getOverview: () => api.get('/status/overview'),
 };
 
 // Persona API
@@ -143,9 +143,10 @@ export const personaApi = {
   getActive: () => api.get('/personas/active'),
   getById: (id) => api.get(`/personas/${id}`),
   activate: (id) => api.post(`/personas/${id}/activate`),
-  applyFeedback: (id, feedback) => api.post(`/personas/${id}/feedback`, { feedback }),
+  applyFeedback: (id, feedback) =>
+    api.post(`/personas/${id}/feedback`, { feedback }),
   create: (data) => api.post('/personas', data),
-  delete: (id) => api.delete(`/personas/${id}`)
+  delete: (id) => api.delete(`/personas/${id}`),
 };
 
 // Memory API
@@ -163,7 +164,7 @@ export const memoryApi = {
     api.post('/memory', { content, type, metadata }),
   delete: (id) => api.delete(`/memory/${id}`),
   clear: () => api.delete('/memory'),
-  getDaily: (days = 7) => api.get(`/memory/daily?days=${days}`)
+  getDaily: (days = 7) => api.get(`/memory/daily?days=${days}`),
 };
 
 // Workers API
@@ -172,12 +173,16 @@ export const workersApi = {
   getById: (id) => api.get(`/workers/${id}`),
   getStats: () => api.get('/workers/stats'),
   getByStatus: (status) => api.get(`/workers/filter/${status}`),
+  getActive: () => api.get('/workers/active'),
+  getActiveWorker: (id) => api.get(`/workers/active/${id}`),
   create: (data) => api.post('/workers', data),
   cancel: (id) => api.post(`/workers/${id}/cancel`),
   retry: (id) => api.post(`/workers/${id}/retry`),
+  terminate: (id) => api.post(`/workers/${id}/terminate`),
   generateTodo: (projectName, subtasks, options) =>
     api.post('/workers/todo', { projectName, subtasks, options }),
-  cleanup: (olderThanDays = 7) => api.post('/workers/cleanup', { olderThanDays })
+  cleanup: (olderThanDays = 7) =>
+    api.post('/workers/cleanup', { olderThanDays }),
 };
 
 // Connectors API
@@ -192,7 +197,7 @@ export const connectorsApi = {
   getWrapper: (id) => api.get(`/connectors/${id}/wrapper`),
   getDocs: (id) => api.get(`/connectors/${id}/docs`),
   getStats: () => api.get('/connectors/stats'),
-  createCommon: (service) => api.post(`/connectors/common/${service}`)
+  createCommon: (service) => api.post(`/connectors/common/${service}`),
 };
 
 // Chat API
@@ -202,7 +207,7 @@ export const chatApi = {
   getHistory: (limit = 20) => api.get(`/chat/history?limit=${limit}`),
   clearHistory: () => api.delete('/chat/history'),
   getPersona: () => api.get('/chat/persona'),
-  sendCommand: (command) => api.post('/chat/command', { command })
+  sendCommand: (command) => api.post('/chat/command', { command }),
 };
 
 // Config API
@@ -213,12 +218,12 @@ export const configApi = {
   updateKey: (key, value) => api.put(`/config/${key}`, { value }),
   reset: () => api.post('/config/reset'),
   getSections: () => api.get('/config/sections'),
-  export: () => api.get('/config/export')
+  export: () => api.get('/config/export'),
 };
 
 // Health check
 export const healthApi = {
-  check: () => api.get('/health')
+  check: () => api.get('/health'),
 };
 
 // Create singleton instance
