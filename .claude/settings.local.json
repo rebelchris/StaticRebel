@@ -33,7 +33,8 @@
       "Bash(test:*)",
       "Bash(git config:*)",
       "Bash(wc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(ls:*)"
     ]
   }
 }

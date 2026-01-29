@@ -19,6 +19,7 @@ export default {
   version: '1.0.0',
 
   intentExamples: [
+    // Logging intent
     'log my calories',
     'log my food',
     'log my meal',
@@ -33,6 +34,16 @@ export default {
     'I ate',
     'I drank',
     'I consumed',
+    'add a meal',
+    'add a workout',
+    'record my calories',
+    'logging',
+    'note this down',
+    'I did a run',
+    'I went for a run',
+    'I went for a walk',
+    'I completed a workout',
+    // Query intent
     'how many calories',
     'what did I eat',
     'what did I drink',
@@ -40,24 +51,25 @@ export default {
     'show my calories',
     'show my food',
     'show my workout',
-    'add a meal',
-    'add a workout',
-    'record my calories',
-    'logging',
-    'track this',
-    'keep track of',
-    'note this down',
-    'I did a run',
-    'I went for a run',
-    'I went for a walk',
-    'I completed a workout',
+    // Create intent
+    'create a tracker',
+    'add a tracker',
+    'new tracker',
+    'make a tracker',
+    'set up a tracker',
+    'create a custom tracker',
+    'add a custom tracker',
+    'I want to track',
+    'start tracking',
+    'set up tracking for',
+    'can you track',
   ],
 
   parameters: {
     action: {
       type: 'enum',
-      values: ['log', 'query'],
-      description: 'Whether to log data or query existing data',
+      values: ['log', 'query', 'create'],
+      description: 'Whether to log data, query existing data, or create a new tracker',
     },
     trackerType: {
       type: 'enum',
@@ -101,7 +113,31 @@ export default {
       return null;
     }
 
-    // Step 2: Handle QUERY intent
+    // Step 2: Handle CREATE intent - explicitly creating a new tracker
+    if (intent.intentType === 'create') {
+      const trackerDesc = intent.description || input;
+      console.log(`  \x1b[36m[Creating new tracker: ${trackerDesc}]\x1b[0m`);
+
+      const trackerConfig = await parseTrackerFromNaturalLanguage(trackerDesc);
+      if (!trackerConfig) {
+        return "I couldn't understand what kind of tracker you want. Try: 'create a tracker for pushups' or 'new workout tracker'";
+      }
+
+      // Check if a tracker with this name already exists
+      const existing = trackers.find((t) => t.name === trackerConfig.name);
+      if (existing) {
+        return `A tracker named **@${trackerConfig.name}** already exists. Use it with: "@${trackerConfig.name} add..."`;
+      }
+
+      const createResult = store.createTracker(trackerConfig);
+      if (!createResult.success) {
+        return `Failed to create tracker: ${createResult.error}`;
+      }
+
+      return `Created new tracker **@${trackerConfig.name}** (${trackerConfig.displayName})\n\nType: ${trackerConfig.type}\nMetrics: ${trackerConfig.config?.metrics?.join(', ') || 'custom'}\n\nLog entries with: "@${trackerConfig.name} [your entry]"`;
+    }
+
+    // Step 3: Handle QUERY intent
     if (intent.intentType === 'query') {
       if (trackers.length === 0) {
         return "No trackers configured yet. Start logging data and I'll create one for you!";
@@ -119,7 +155,7 @@ export default {
       return await handleTrackQuery(input, tracker, store);
     }
 
-    // Step 3: Handle LOG intent
+    // Step 4: Handle LOG intent
     if (intent.intentType === 'log') {
       // Find or create the appropriate tracker
       const tracker = await findOrCreateTracker(
@@ -190,17 +226,20 @@ ${trackersList}
 
 Respond with ONLY valid JSON:
 {
-  "intentType": "log|query|none",
+  "intentType": "create|log|query|none",
   "trackerType": "nutrition|workout|sleep|habit|mood|hydration|medication|custom|unknown",
   "trackerNeeded": "existing_tracker_name or null if needs new tracker",
-  "description": "brief description of what tracker this needs (if new)",
+  "description": "brief description of what to track (for new trackers)",
   "confidence": 0.0-1.0
 }
 
 Intent types:
-- "log": User wants to record/log data (e.g., "I had coffee", "did a 5k run", "log calories")
+- "create": User explicitly wants to CREATE/ADD/MAKE a new tracker (e.g., "create a tracker for pushups", "add a custom tracker for...", "make a new tracker", "set up tracking for...", "I want to track X" where X is a new category not in existing trackers)
+- "log": User wants to record/log actual data to an existing tracker (e.g., "I had coffee", "did a 5k run", "log 50 pushups", "I ate pizza")
 - "query": User wants to retrieve/view data (e.g., "what did I eat", "how many calories", "show my workouts")
-- "none": Not tracking-related`;
+- "none": Not tracking-related
+
+IMPORTANT: If the user says "add a tracker", "create a tracker", "new tracker", "set up tracking for", or similar phrases about MAKING a tracker, that is "create" intent, NOT "log" intent.`;
 
     const model = getDefaultModel();
     const response = await chatCompletion(model, [
@@ -230,25 +269,58 @@ async function findOrCreateTracker(
   chatCompletion,
 ) {
   try {
-    // Check if a tracker of this type already exists
     const trackers = store.listTrackers();
-    const existingTracker = trackers.find(
-      (t) =>
-        t.type === trackerType ||
-        (trackerType === 'nutrition' &&
-          (t.type === 'food' || t.type === 'nutrition')),
-    );
 
-    if (existingTracker) {
-      return existingTracker;
+    // For non-custom trackers, match by type
+    if (trackerType !== 'custom' && trackerType !== 'unknown') {
+      const existingTracker = trackers.find(
+        (t) =>
+          t.type === trackerType ||
+          (trackerType === 'nutrition' &&
+            (t.type === 'food' || t.type === 'nutrition')),
+      );
+
+      if (existingTracker) {
+        return existingTracker;
+      }
     }
 
-    // Auto-create the tracker
+    // For custom trackers, try to match by name/description similarity
+    if (trackerType === 'custom' && description) {
+      const descLower = description.toLowerCase();
+      const keywords = descLower.split(/\s+/).filter((w) => w.length > 2);
+
+      // Look for a tracker whose name or displayName contains relevant keywords
+      const matchingTracker = trackers.find((t) => {
+        const trackerName = (t.name + ' ' + t.displayName).toLowerCase();
+        return keywords.some(
+          (kw) => trackerName.includes(kw) || descLower.includes(t.name),
+        );
+      });
+
+      if (matchingTracker) {
+        console.log(
+          `  \x1b[36m[Matched existing tracker: @${matchingTracker.name}]\x1b[0m`,
+        );
+        return matchingTracker;
+      }
+    }
+
+    // Auto-create the tracker if no match found
     console.log(`  \x1b[36m[Auto-creating ${trackerType} tracker...]\x1b[0m`);
 
     const trackerConfig = await parseTrackerFromNaturalLanguage(description);
     if (!trackerConfig) {
       return null;
+    }
+
+    // Check if name already exists
+    const nameExists = trackers.find((t) => t.name === trackerConfig.name);
+    if (nameExists) {
+      console.log(
+        `  \x1b[33m[Tracker @${trackerConfig.name} already exists, using it]\x1b[0m`,
+      );
+      return nameExists;
     }
 
     // Create the tracker

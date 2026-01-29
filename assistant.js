@@ -5191,6 +5191,20 @@ async function startTelegramBot() {
     return null;
   }
 
+  // Check for placeholder tokens
+  if (tokenToUse.includes('YOUR_') || tokenToUse.includes('_HERE') || tokenToUse.length < 30) {
+    console.log(
+      '\x1b[33m  [Telegram: token appears to be a placeholder, skipping]\x1b[0m\n',
+    );
+    console.log(
+      '\x1b[90m  To enable Telegram, get a token from @BotFather and update:\x1b[0m\n',
+    );
+    console.log(
+      '\x1b[90m  ~/.static-rebel/config/config.json -> telegram.botToken\x1b[0m\n',
+    );
+    return null;
+  }
+
   if (!isEnabled) {
     if (VERBOSE)
       console.log(
@@ -5700,9 +5714,23 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
       logToFile('telegram-error', 'error', err.message, { context: 'bot-error' });
     });
 
+    // Rate-limit polling error logs to avoid spam
+    let lastPollingError = 0;
+    let pollingErrorCount = 0;
     telegramBot.on('polling_error', (err) => {
-      console.error(`\x1b[31m[Polling error: ${err.message}]\x1b[0m\n`);
-      logToFile('telegram-error', 'error', err.message, { context: 'polling-error' });
+      const now = Date.now();
+      pollingErrorCount++;
+      // Only log once per 30 seconds to avoid spam
+      if (now - lastPollingError > 30000) {
+        if (pollingErrorCount > 1) {
+          console.error(`\x1b[31m[Polling error (${pollingErrorCount}x): ${err.message}]\x1b[0m\n`);
+        } else {
+          console.error(`\x1b[31m[Polling error: ${err.message}]\x1b[0m\n`);
+        }
+        logToFile('telegram-error', 'error', err.message, { context: 'polling-error', count: pollingErrorCount });
+        lastPollingError = now;
+        pollingErrorCount = 0;
+      }
     });
 
     return telegramBot;

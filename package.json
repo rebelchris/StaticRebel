@@ -5,7 +5,8 @@
   "type": "module",
   "main": "assistant.js",
   "scripts": {
-    "start": "node enhanced.js",
+    "start": "node start.js",
+    "assistant": "node assistant.js",
     "chat": "node enhanced.js",
     "enhanced": "node enhanced.js",
     "chat-cmd": "node enhanced.js",
