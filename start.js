@@ -48,54 +48,30 @@ function startProcess(name, script, color) {
   });
 
   proc.on('exit', (code, signal) => {
-    if (code !== null) {
-      log(name, `Exited with code ${code}`, code === 0 ? '\x1b[32m' : '\x1b[31m');
-    } else if (signal) {
-      log(name, `Killed by signal ${signal}`, '\x1b[33m');
-    }
+    log(name, `Exited with code ${code} (signal: ${signal})`, '\x1b[33m');
   });
 
   processes.push({ name, proc });
   return proc;
 }
 
-function shutdown() {
-  console.log('\n\x1b[33mShutting down...\x1b[0m');
+// Graceful shutdown
+process.on('SIGINT', () => {
+  log('START', 'Shutting down all services...', '\x1b[33m');
   processes.forEach(({ name, proc }) => {
-    log(name, 'Stopping...', '\x1b[33m');
+    log('START', `Stopping ${name}...`, '\x1b[33m');
     proc.kill('SIGTERM');
   });
+  setTimeout(() => process.exit(0), 1000);
+});
 
-  // Force kill after 5 seconds
-  setTimeout(() => {
-    processes.forEach(({ proc }) => {
-      if (!proc.killed) {
-        proc.kill('SIGKILL');
-      }
-    });
-    process.exit(0);
-  }, 5000);
-}
+// Start services
+log('START', 'Starting Static Rebel services...', '\x1b[36m');
 
-// Handle shutdown signals
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+// Start Dashboard
+startProcess('DASHBOARD', 'dashboard/server.js', '\x1b[35m');
 
-// Banner
-console.log('\x1b[36m');
-console.log('╔════════════════════════════════════════════╗');
-console.log('║         Static Rebel - Starting Up         ║');
-console.log('╚════════════════════════════════════════════╝');
-console.log('\x1b[0m');
+// Start Assistant (with Telegram bot)
+startProcess('ASSISTANT', 'assistant.js', '\x1b[34m');
 
-// Start the dashboard
-log('Dashboard', 'Starting on http://localhost:3456', '\x1b[35m');
-startProcess('Dashboard', 'dashboard/server.js', '\x1b[35m');
-
-// Small delay before starting assistant to avoid port conflicts
-setTimeout(() => {
-  log('Assistant', 'Starting (with Telegram bot if configured)', '\x1b[36m');
-  startProcess('Assistant', 'assistant.js', '\x1b[36m');
-}, 1000);
-
-console.log('\n\x1b[90mPress Ctrl+C to stop all services\x1b[0m\n');
+log('START', 'All services started! Press Ctrl+C to stop.', '\x1b[32m');
