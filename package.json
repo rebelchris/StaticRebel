@@ -13,8 +13,9 @@
     "orchestrator": "node orchestrator.js",
     "orch": "node orchestrator.js",
     "stream": "node orchestrator.js stream",
-    "dashboard": "node dashboard/server.js",
-    "dashboard:dev": "node --watch dashboard/server.js",
+    "dashboard:api": "node dashboard/server.js",
+    "dashboard:ui": "cd dashboard && npm run dev",
+    "dashboard": "node dashboard/server.js & cd dashboard && npm run dev",
     "install-db": "npm install better-sqlite3",
     "postinstall": "cd dashboard && npm install",
     "test": "echo \"Error: no test specified\" && exit 1"

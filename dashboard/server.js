@@ -84,7 +84,8 @@ function rateLimitMiddleware(req, res, next) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3333;
+const HOST = process.env.HOST || '0.0.0.0'; // Allow external connections
 
 // Import backend modules
 let personaManager, vectorMemory, workerManager, apiConnector, configManager;
@@ -148,10 +149,12 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 // Security middleware
-// CORS - Restrict to allowed origins
+// CORS - Restrict to allowed origins (add your network IPs or use * for development)
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  /^http:\/\/192\.168\.\d+\.\d+:3000$/, // Local network access
+  /^http:\/\/10\.\d+\.\d+\.\d+:3000$/,  // Local network access
 ];
 
 app.use(
@@ -160,7 +163,13 @@ app.use(
       // Allow requests with no origin (mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      // Check against strings and regex patterns
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (allowed instanceof RegExp) return allowed.test(origin);
+        return allowed === origin;
+      });
+
+      if (isAllowed) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -321,16 +330,21 @@ app.get('/logs', (req, res) => {
 });
 
 // Start server
-server.listen(PORT, () => {
-  console.log(`Dashboard server running at http://localhost:${PORT}`);
-  console.log('Available pages:');
-  console.log(`  - Dashboard: http://localhost:${PORT}/`);
-  console.log(`  - Personas: http://localhost:${PORT}/personas`);
-  console.log(`  - Memory: http://localhost:${PORT}/memory`);
-  console.log(`  - Workers: http://localhost:${PORT}/workers`);
-  console.log(`  - Trackers: http://localhost:${PORT}/trackers`);
-  console.log(`  - Logs: http://localhost:${PORT}/logs`);
-  console.log(`  - APIs: http://localhost:${PORT}/apis`);
-  console.log(`  - Chat: http://localhost:${PORT}/chat`);
-  console.log(`  - Config: http://localhost:${PORT}/config`);
+server.listen(PORT, HOST, () => {
+  console.log(`\n🚀 API server running at http://localhost:${PORT}`);
+  if (HOST === '0.0.0.0') {
+    // Get local network IP for convenience
+    import('os').then(os => {
+      const nets = os.networkInterfaces();
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+          if (net.family === 'IPv4' && !net.internal) {
+            console.log(`   Network access: http://${net.address}:${PORT}`);
+          }
+        }
+      }
+    }).catch(() => {});
+  }
+  console.log('\n📡 API endpoints available at /api/*');
+  console.log('   Run "cd dashboard && npm run dev" for the React UI on port 3000\n');
 });
