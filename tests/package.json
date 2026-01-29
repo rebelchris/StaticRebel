@@ -4,16 +4,16 @@
   "description": "Test suite for Static Rebel AI Assistant",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/**/*.test.js",
-    "test:lib": "node --test tests/lib/*.test.js",
-    "test:agents": "node --test tests/agents/*.test.js",
-    "test:dashboard": "node --test tests/dashboard/*.test.js",
-    "test:config": "node --test tests/lib/configManager.test.js",
-    "test:memory": "node --test tests/lib/memoryManager.test.js",
-    "test:models": "node --test tests/lib/modelRegistry.test.js",
-    "test:subagents": "node --test tests/lib/subagentManager.test.js",
-    "test:cron": "node --test tests/lib/cronScheduler.test.js",
-    "test:watch": "node --watch --test tests/**/*.test.js"
+    "test": "node --test lib/*.test.js agents/*.test.js dashboard/*.test.js",
+    "test:lib": "node --test lib/*.test.js",
+    "test:agents": "node --test agents/*.test.js",
+    "test:dashboard": "node --test dashboard/*.test.js",
+    "test:config": "node --test lib/configManager.test.js",
+    "test:memory": "node --test lib/memoryManager.test.js",
+    "test:models": "node --test lib/modelRegistry.test.js",
+    "test:subagents": "node --test lib/subagentManager.test.js",
+    "test:cron": "node --test lib/cronScheduler.test.js",
+    "test:watch": "node --watch --test lib/*.test.js agents/*.test.js dashboard/*.test.js"
   },
   "devDependencies": {},
   "engines": {

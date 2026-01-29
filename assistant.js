@@ -22,22 +22,114 @@ import os from 'os';
 import { spawn } from 'child_process';
 
 // Core modules (NEW)
-import { loadConfig, getConfig, saveConfig, resolvePath } from './lib/configManager.js';
-import { initMemory, loadSessionMemory, writeDailyMemory, getMemoryStats, readLongTermMemory } from './lib/memoryManager.js';
-import { listAvailableModels, getModelForTask, detectTaskType, chatCompletion, getDefaultModel, createEmbeddings } from './lib/modelRegistry.js';
-import { startScheduler, listCronJobs, addCronJob, describeCron, getNextRunTime, toggleCronJob, deleteCronJob, getSchedulerStatus } from './lib/cronScheduler.js';
-import { startHeartbeatMonitor, getHeartbeatStatus, performAllScheduledChecks, isQuietHours } from './lib/heartbeatManager.js';
-import { listSubagents, createCodingSubagent, createAnalysisSubagent, sendToSubagent, getSubagentStats } from './lib/subagentManager.js';
-import { listSkills, checkTriggers, createSkill, getSkillsStats } from './lib/skillsManager.js';
-import { askYesNo, numberedSelect, multiSelect, checkRiskyAction, checkNeedsClarification } from './prompt.js';
+import {
+  loadConfig,
+  getConfig,
+  saveConfig,
+  resolvePath,
+} from './lib/configManager.js';
+import {
+  initMemory,
+  loadSessionMemory,
+  writeDailyMemory,
+  getMemoryStats,
+  readLongTermMemory,
+} from './lib/memoryManager.js';
+import {
+  listAvailableModels,
+  getModelForTask,
+  detectTaskType,
+  chatCompletion,
+  getDefaultModel,
+  createEmbeddings,
+} from './lib/modelRegistry.js';
+import {
+  startScheduler,
+  listCronJobs,
+  addCronJob,
+  describeCron,
+  getNextRunTime,
+  toggleCronJob,
+  deleteCronJob,
+  getSchedulerStatus,
+} from './lib/cronScheduler.js';
+import {
+  startHeartbeatMonitor,
+  getHeartbeatStatus,
+  performAllScheduledChecks,
+  isQuietHours,
+} from './lib/heartbeatManager.js';
+import {
+  listSubagents,
+  createCodingSubagent,
+  createAnalysisSubagent,
+  sendToSubagent,
+  getSubagentStats,
+} from './lib/subagentManager.js';
+import {
+  listSkills,
+  checkTriggers,
+  createSkill,
+  getSkillsStats,
+} from './lib/skillsManager.js';
+import {
+  askYesNo,
+  numberedSelect,
+  multiSelect,
+  checkRiskyAction,
+  checkNeedsClarification,
+} from './prompt.js';
+import {
+  isQuestionAnswer,
+  processAnswer,
+  startQuestionFlow,
+  createYesNoQuestion,
+  createConfirmQuestion,
+  getState,
+  clearState,
+} from './lib/followUpManager.js';
 
 // Agent modules (NEW)
-import { loadPersona, buildSystemPrompt, sendMessage, handleCommand, getSessionContext, clearSession, startSession } from './agents/main/agent.js';
-import { runCommand as runCodingCommand, readFile, executeChange } from './agents/coding/agent.js';
+import {
+  loadPersona,
+  buildSystemPrompt,
+  sendMessage,
+  handleCommand,
+  getSessionContext,
+  clearSession,
+  startSession,
+} from './agents/main/agent.js';
+import {
+  runCommand as runCodingCommand,
+  readFile,
+  executeChange,
+} from './agents/coding/agent.js';
 
 // Tracker & Companion (existing)
-import { TrackerStore, VisionAnalyzer, QueryEngine, parseTrackerFromNaturalLanguage, parseRecordFromText, runTrackerWizard, confirmOrCustomizeTracker, PersonaChat, matchesAutoDetect } from './tracker.js';
-import { showCompanion, setState, reactToEvent, setStats, toggleStats, getAvailableCompanions, setCompanion, showCompanionUI, toggleVisibility, startAnimation, stopAnimation } from './companion.js';
+import {
+  TrackerStore,
+  VisionAnalyzer,
+  QueryEngine,
+  parseTrackerFromNaturalLanguage,
+  parseRecordFromText,
+  runTrackerWizard,
+  confirmOrCustomizeTracker,
+  PersonaChat,
+  matchesAutoDetect,
+} from './tracker.js';
+import {
+  showCompanion,
+  setState,
+  reactToEvent,
+  setStats,
+  toggleStats,
+  getAvailableCompanions,
+  setCompanion,
+  showCompanionUI,
+  toggleVisibility,
+  startAnimation,
+  stopAnimation,
+} from './companion.js';
 
 // ============================================================================
 // Configuration
@@ -48,7 +140,9 @@ const MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
 const VISION_MODEL = process.env.VISION_MODEL || 'llava';
 const MEMORY_FILE = path.join(os.homedir(), '.static-rebel', 'memory', 'daily');
-const PROFILE_FILE = process.env.PROFILE_FILE || path.join(os.homedir(), '.static-rebel-profile.md');
+const PROFILE_FILE =
+  process.env.PROFILE_FILE ||
+  path.join(os.homedir(), '.static-rebel-profile.md');
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '30000');
@@ -115,13 +209,38 @@ const PROFILE_TEMPLATE = `# User Profile
 `;
 
 const ONBOARDING_QUESTIONS = [
-  { key: 'name', prompt: "Hi! I'm Charlize. What's your name?", default: 'Friend' },
-  { key: 'role', prompt: "Nice to meet you, {name}. What do you do for work?", default: 'Developer' },
-  { key: 'location', prompt: "Where are you based?", default: 'Somewhere' },
-  { key: 'communication_style', prompt: "How do you prefer to communicate? (brief & direct / detailed & thorough)", default: 'brief' },
-  { key: 'tools', prompt: "What tools or technologies do you use most?", default: 'Various' },
-  { key: 'work_hours', prompt: "What are your typical work hours?", default: '9-5' },
-  { key: 'goals', prompt: "What are you working on right now? Any big goals?", default: 'Just exploring' },
+  {
+    key: 'name',
+    prompt: "Hi! I'm Charlize. What's your name?",
+    default: 'Friend',
+  },
+  {
+    key: 'role',
+    prompt: 'Nice to meet you, {name}. What do you do for work?',
+    default: 'Developer',
+  },
+  { key: 'location', prompt: 'Where are you based?', default: 'Somewhere' },
+  {
+    key: 'communication_style',
+    prompt:
+      'How do you prefer to communicate? (brief & direct / detailed & thorough)',
+    default: 'brief',
+  },
+  {
+    key: 'tools',
+    prompt: 'What tools or technologies do you use most?',
+    default: 'Various',
+  },
+  {
+    key: 'work_hours',
+    prompt: 'What are your typical work hours?',
+    default: '9-5',
+  },
+  {
+    key: 'goals',
+    prompt: 'What are you working on right now? Any big goals?',
+    default: 'Just exploring',
+  },
 ];
 
 function loadProfile() {
@@ -152,20 +271,22 @@ async function buildProfile(rl) {
   console.log('='.repeat(50));
   console.log('  Charlize - Initial Setup');
   console.log('='.repeat(50));
-  console.log("  Let me get to know you a bit...\n");
+  console.log('  Let me get to know you a bit...\n');
 
   const answers = {};
 
   for (const q of ONBOARDING_QUESTIONS) {
     const question = q.prompt.replace(`{${q.key}}`, answers.name || q.default);
-    const answer = await new Promise(resolve => {
+    const answer = await new Promise((resolve) => {
       rl.question(`  ${question}: `, resolve);
     });
     answers[q.key] = answer.trim() || q.default;
   }
 
-  const profile = PROFILE_TEMPLATE
-    .replace('{date}', new Date().toLocaleDateString())
+  const profile = PROFILE_TEMPLATE.replace(
+    '{date}',
+    new Date().toLocaleDateString(),
+  )
     .replace('{name}', answers.name)
     .replace('{role}', answers.role)
     .replace('{location}', answers.location)
@@ -209,12 +330,41 @@ const MODELS = {
 
 // Task patterns that indicate delegation is needed
 const DELEGATION_PATTERNS = [
-  { pattern: /\b(write|create|build|make|implement|develop)\s+(a\s+)?(function|class|module|api|component|script|程序|函数|类)\b/i, type: 'coding', confidence: 0.9 },
-  { pattern: /\b(code|debug|fix|refactor|review)\s+(this|the|my)?\b/i, type: 'coding', confidence: 0.9 },
-  { pattern: /\b(analyze|compare|evaluate|assess)\s+(code|system|architecture|design|这个|代码|系统)\b/i, type: 'analysis', confidence: 0.85 },
-  { pattern: /\b(explain|understand|think through)\s+(how|why|what|为什么|如何)\b/i, type: 'analysis', confidence: 0.7 },
-  { pattern: /\b(create|write)\s+(a\s+)?(story|poem|article|blog|content|脚本|文章)\b/i, type: 'creative', confidence: 0.8 },
-  { pattern: /\b[📝🔧💻⚡🚀✨🔥⭐🎯📌🔍🎨🔐💡📚🤖💭📖📋✅❓🔎📈📊💬🎭📜🔑🎓📝🔖📕📗📘📙📔📒📑🔖]/, type: 'coding', confidence: 0.6 },
+  {
+    pattern:
+      /\b(write|create|build|make|implement|develop)\s+(a\s+)?(function|class|module|api|component|script|程序|函数|类)\b/i,
+    type: 'coding',
+    confidence: 0.9,
+  },
+  {
+    pattern: /\b(code|debug|fix|refactor|review)\s+(this|the|my)?\b/i,
+    type: 'coding',
+    confidence: 0.9,
+  },
+  {
+    pattern:
+      /\b(analyze|compare|evaluate|assess)\s+(code|system|architecture|design|这个|代码|系统)\b/i,
+    type: 'analysis',
+    confidence: 0.85,
+  },
+  {
+    pattern:
+      /\b(explain|understand|think through)\s+(how|why|what|为什么|如何)\b/i,
+    type: 'analysis',
+    confidence: 0.7,
+  },
+  {
+    pattern:
+      /\b(create|write)\s+(a\s+)?(story|poem|article|blog|content|脚本|文章)\b/i,
+    type: 'creative',
+    confidence: 0.8,
+  },
+  {
+    pattern:
+      /\b[📝🔧💻⚡🚀✨🔥⭐🎯📌🔍🎨🔐💡📚🤖💭📖📋✅❓🔎📈📊💬🎭📜🔑🎓📝🔖📕📗📘📙📔📒📑🔖]/,
+    type: 'coding',
+    confidence: 0.6,
+  },
 ];
 
 // When to NOT delegate
@@ -281,14 +431,16 @@ async function runClaudeSubagent(task, workspace = null, options = {}) {
 
       console.log(`\n  [Claude Code in: ${workspaceDir}]`);
 
-      const onChunk = options.stream ? (chunk) => {
-        process.stdout.write(chunk);
-      } : null;
+      const onChunk = options.stream
+        ? (chunk) => {
+            process.stdout.write(chunk);
+          }
+        : null;
 
       const result = await claudeInDir(workspaceDir, task, {
         model: options.model || 'claude',
         stream: options.stream !== false,
-        onOutput: onChunk
+        onOutput: onChunk,
       });
 
       resolve({ output: result, workspace: wsName });
@@ -413,14 +565,14 @@ req.end();
 
     const proc = spawn('node', ['-e', script], {
       cwd: workspaceDir,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', d => stdout += d.toString());
-    proc.stderr.on('data', d => stderr += d.toString());
+    proc.stdout.on('data', (d) => (stdout += d.toString()));
+    proc.stderr.on('data', (d) => (stderr += d.toString()));
 
     proc.on('close', (code) => {
       if (code !== 0) {
@@ -438,7 +590,7 @@ req.end();
 function listWorkspaces() {
   try {
     if (!fs.existsSync(WORKSPACES_DIR)) return [];
-    return fs.readdirSync(WORKSPACES_DIR).filter(w => {
+    return fs.readdirSync(WORKSPACES_DIR).filter((w) => {
       const full = path.join(WORKSPACES_DIR, w);
       return fs.statSync(full).isDirectory();
     });
@@ -494,27 +646,33 @@ class MemoryStore {
     return new Promise((resolve) => {
       const data = JSON.stringify({
         model: EMBEDDING_MODEL,
-        prompt: text
+        prompt: text,
       });
 
-      const req = http.request({
-        hostname: new URL(OLLAMA_HOST).hostname,
-        port: new URL(OLLAMA_HOST).port || 11434,
-        path: '/api/embeddings',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-      }, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => {
-          try {
-            const response = JSON.parse(body);
-            resolve(response.embedding || null);
-          } catch {
-            resolve(null);
-          }
-        });
-      });
+      const req = http.request(
+        {
+          hostname: new URL(OLLAMA_HOST).hostname,
+          port: new URL(OLLAMA_HOST).port || 11434,
+          path: '/api/embeddings',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data),
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => {
+            try {
+              const response = JSON.parse(body);
+              resolve(response.embedding || null);
+            } catch {
+              resolve(null);
+            }
+          });
+        },
+      );
 
       req.onerror = () => resolve(null);
       req.write(data);
@@ -524,7 +682,9 @@ class MemoryStore {
 
   cosineSimilarity(a, b) {
     if (!a || !b || a.length !== b.length) return 0;
-    let dot = 0, magA = 0, magB = 0;
+    let dot = 0,
+      magA = 0,
+      magB = 0;
     for (let i = 0; i < a.length; i++) {
       dot += a[i] * b[i];
       magA += a[i] * a[i];
@@ -539,7 +699,10 @@ class MemoryStore {
     const timestamp = Date.now();
     const dateStr = new Date(timestamp).toISOString().split('T')[0]; // "2026-01-27"
     const readableDate = new Date(timestamp).toLocaleDateString('en-US', {
-      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
     }); // "Mon, Jan 27, 2026"
 
     // Include date in the embedded text so queries can find by date
@@ -550,17 +713,18 @@ class MemoryStore {
     try {
       embedding = await this.getEmbedding(textWithDate);
     } catch (e) {
-      if (VERBOSE) console.log(`  [Memory: embedding failed, storing without vector]\n`);
+      if (VERBOSE)
+        console.log(`  [Memory: embedding failed, storing without vector]\n`);
     }
 
     const memory = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
       text: text.trim(), // Original text without date
-      textWithDate,      // Text with date for embedding
+      textWithDate, // Text with date for embedding
       category,
       embedding,
       createdAt: timestamp,
-      dateStr
+      dateStr,
     };
 
     data.memories.push(memory);
@@ -603,10 +767,10 @@ class MemoryStore {
     }
 
     const results = data.memories
-      .filter(m => m.embedding)
-      .map(m => ({
+      .filter((m) => m.embedding)
+      .map((m) => ({
         ...m,
-        score: this.cosineSimilarity(queryEmbedding, m.embedding)
+        score: this.cosineSimilarity(queryEmbedding, m.embedding),
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
@@ -616,19 +780,21 @@ class MemoryStore {
       return this.simpleSearch(data.memories, query, limit);
     }
 
-    return results.filter(r => r.score > 0.3);
+    return results.filter((r) => r.score > 0.3);
   }
 
   simpleSearch(memories, query, limit) {
     const queryLower = query.toLowerCase();
-    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+    const queryWords = queryLower.split(/\s+/).filter((w) => w.length > 2);
 
     // Check for date patterns in query
-    const datePatternMatch = queryLower.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}/i);
+    const datePatternMatch = queryLower.match(
+      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}/i,
+    );
     const hasDateQuery = datePatternMatch !== null;
 
     return memories
-      .map(m => {
+      .map((m) => {
         const memLower = m.text.toLowerCase();
         const memDate = (m.dateStr || '').toLowerCase();
 
@@ -641,19 +807,19 @@ class MemoryStore {
         }
 
         // Word overlap
-        const memWords = memLower.split(/\s+/).filter(w => w.length > 2);
-        const overlap = queryWords.filter(w => memWords.includes(w)).length;
+        const memWords = memLower.split(/\s+/).filter((w) => w.length > 2);
+        const overlap = queryWords.filter((w) => memWords.includes(w)).length;
         const score = overlap / Math.max(queryWords.length, memWords.length);
         return { ...m, score };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
-      .filter(r => r.score > 0.1);
+      .filter((r) => r.score > 0.1);
   }
 
   delete(id) {
     const data = this.load();
-    const idx = data.memories.findIndex(m => m.id === id);
+    const idx = data.memories.findIndex((m) => m.id === id);
     if (idx === -1) return false;
     data.memories.splice(idx, 1);
     this.save(data);
@@ -681,20 +847,23 @@ const CDP_URL = `ws://127.0.0.1:${CDP_PORT}`;
 
 async function cdpCommand(method, params = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.request({
-      hostname: '127.0.0.1',
-      port: CDP_PORT,
-      path: '/json/protocol',
-      method: 'GET',
-      timeout: 5000
-    }, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        // Try to use CDP WebSocket
-        cdpWsRequest(method, params).then(resolve).catch(reject);
-      });
-    });
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: CDP_PORT,
+        path: '/json/protocol',
+        method: 'GET',
+        timeout: 5000,
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          // Try to use CDP WebSocket
+          cdpWsRequest(method, params).then(resolve).catch(reject);
+        });
+      },
+    );
     req.onerror = () => reject(new Error('CDP not available'));
     req.end();
   });
@@ -741,27 +910,30 @@ async function cdpWsRequest(method, params = {}) {
 async function browserNavigate(url) {
   try {
     // First get the target ID
-    const targetsReq = http.request({
-      hostname: '127.0.0.1',
-      port: CDP_PORT,
-      path: '/json',
-      method: 'GET',
-      timeout: 3000
-    }, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try {
-          const targets = JSON.parse(body);
-          const target = targets.find(t => t.type === 'page');
-          if (target) {
-            // Navigate to URL using the target's webSocketDebuggerUrl
-            const wsUrl = target.webSocketDebuggerUrl;
-            browserWsCommand(wsUrl, 'Page.navigate', { url });
-          }
-        } catch (e) {}
-      });
-    });
+    const targetsReq = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: CDP_PORT,
+        path: '/json',
+        method: 'GET',
+        timeout: 3000,
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          try {
+            const targets = JSON.parse(body);
+            const target = targets.find((t) => t.type === 'page');
+            if (target) {
+              // Navigate to URL using the target's webSocketDebuggerUrl
+              const wsUrl = target.webSocketDebuggerUrl;
+              browserWsCommand(wsUrl, 'Page.navigate', { url });
+            }
+          } catch (e) {}
+        });
+      },
+    );
     targetsReq.onerror = () => {};
     targetsReq.end();
     return true;
@@ -809,64 +981,72 @@ async function browserWsCommand(wsUrl, method, params = {}) {
 
 async function browserGetPageContent() {
   return new Promise((resolve) => {
-    http.get(`http://127.0.0.1:${CDP_PORT}/json`, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try {
-          const targets = JSON.parse(body);
-          const target = targets.find(t => t.type === 'page');
-          if (target && target.url) {
-            // Get page content via CDP
-            const wsUrl = target.webSocketDebuggerUrl;
-            browserWsCommand(wsUrl, 'DOM.getDocument', { depth: -1 }).then((domResult) => {
-              browserWsCommand(wsUrl, 'Runtime.evaluate', {
-                expression: 'document.body.innerText.slice(0, 5000)'
-              }).then((textResult) => {
-                resolve({
-                  url: target.url,
-                  title: target.title,
-                  text: textResult.result?.value || ''
-                });
-              });
-            });
-          } else {
-            resolve({ url: 'about:blank', text: '' });
+    http
+      .get(`http://127.0.0.1:${CDP_PORT}/json`, (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          try {
+            const targets = JSON.parse(body);
+            const target = targets.find((t) => t.type === 'page');
+            if (target && target.url) {
+              // Get page content via CDP
+              const wsUrl = target.webSocketDebuggerUrl;
+              browserWsCommand(wsUrl, 'DOM.getDocument', { depth: -1 }).then(
+                (domResult) => {
+                  browserWsCommand(wsUrl, 'Runtime.evaluate', {
+                    expression: 'document.body.innerText.slice(0, 5000)',
+                  }).then((textResult) => {
+                    resolve({
+                      url: target.url,
+                      title: target.title,
+                      text: textResult.result?.value || '',
+                    });
+                  });
+                },
+              );
+            } else {
+              resolve({ url: 'about:blank', text: '' });
+            }
+          } catch (e) {
+            resolve({ error: e.message });
           }
-        } catch (e) {
-          resolve({ error: e.message });
-        }
+        });
+      })
+      .on('error', () => {
+        resolve({ error: 'CDP not available' });
       });
-    }).on('error', () => {
-      resolve({ error: 'CDP not available' });
-    });
   });
 }
 
 async function browserScreenshot() {
   return new Promise((resolve) => {
-    http.get(`http://127.0.0.1:${CDP_PORT}/json`, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try {
-          const targets = JSON.parse(body);
-          const target = targets.find(t => t.type === 'page');
-          if (target) {
-            const wsUrl = target.webSocketDebuggerUrl;
-            browserWsCommand(wsUrl, 'Page.captureScreenshot', { format: 'png' }).then((result) => {
-              resolve(result.data || null);
-            });
-          } else {
+    http
+      .get(`http://127.0.0.1:${CDP_PORT}/json`, (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          try {
+            const targets = JSON.parse(body);
+            const target = targets.find((t) => t.type === 'page');
+            if (target) {
+              const wsUrl = target.webSocketDebuggerUrl;
+              browserWsCommand(wsUrl, 'Page.captureScreenshot', {
+                format: 'png',
+              }).then((result) => {
+                resolve(result.data || null);
+              });
+            } else {
+              resolve(null);
+            }
+          } catch (e) {
             resolve(null);
           }
-        } catch (e) {
-          resolve(null);
-        }
+        });
+      })
+      .on('error', () => {
+        resolve(null);
       });
-    }).on('error', () => {
-      resolve(null);
-    });
   });
 }
 
@@ -874,7 +1054,7 @@ async function browserSearchTwitter(query) {
   const url = `https://twitter.com/search?q=${encodeURIComponent(query)}&f=live`;
   await browserNavigate(url);
   // Wait for page to load
-  await new Promise(r => setTimeout(r, 3000));
+  await new Promise((r) => setTimeout(r, 3000));
   return browserGetPageContent();
 }
 
@@ -911,57 +1091,51 @@ async function webSearch(query, limit = 5) {
     const encodedQuery = encodeURIComponent(query);
     const searchUrl = `https://duckduckgo.com/html/?q=${encodedQuery}&kl=us-en`;
 
-    const req = http.request({
-      hostname: 'duckduckgo.com',
-      port: 443,
-      path: `/html/?q=${encodedQuery}&kl=us-en`,
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-      }
-    }, (res) => {
-      // Handle HTTP error status codes
-      if (res.statusCode !== 200) {
-        console.error(`Web search HTTP error: ${res.statusCode}`);
-        return resolve([]);
-      }
+    const req = http.request(
+      {
+        hostname: 'duckduckgo.com',
+        port: 443,
+        path: `/html/?q=${encodedQuery}&kl=us-en`,
+        method: 'GET',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        },
+      },
+      (res) => {
+        // Handle HTTP error status codes
+        if (res.statusCode !== 200) {
+          console.error(`Web search HTTP error: ${res.statusCode}`);
+          return resolve([]);
+        }
 
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('error', (err) => {
-        console.error(`Web search read error: ${err.message}`);
-        resolve([]);
-      });
-      res.on('end', () => {
-        try {
-          // Parse DuckDuckGo HTML results
-          const results = [];
-          // Updated regex for DuckDuckGo HTML results
-          const linkRegex = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/g;
-          const snippetRegex = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+>.*?<\/a>[\s\S]*?<div[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([^<]+)</g;
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('error', (err) => {
+          console.error(`Web search read error: ${err.message}`);
+          resolve([]);
+        });
+        res.on('end', () => {
+          try {
+            // Parse DuckDuckGo HTML results
+            const results = [];
+            // Updated regex for DuckDuckGo HTML results
+            const linkRegex =
+              /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/g;
+            const snippetRegex =
+              /<a[^>]+class="[^"]*result__a[^"]*"[^>]+>.*?<\/a>[\s\S]*?<div[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([^<]+)</g;
 
-          let match;
-          let lastIndex = 0;
+            let match;
+            let lastIndex = 0;
 
-          // Use a more robust parsing approach
-          while ((match = linkRegex.exec(body)) !== null && results.length < limit) {
-            const url = match[1];
-            // Decode HTML entities in title
-            const title = match[2]
-              .replace(/&amp;/g, '&')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/&quot;/g, '"')
-              .replace(/&#039;/g, "'")
-              .replace(/&apos;/g, "'")
-              .replace(/<[^>]+>/g, '')
-              .trim();
-
-            // Find snippet after this link
-            const snippetMatch = body.substring(match.index).match(snippetRegex);
-            let snippet = '';
-            if (snippetMatch) {
-              snippet = snippetMatch[1]
+            // Use a more robust parsing approach
+            while (
+              (match = linkRegex.exec(body)) !== null &&
+              results.length < limit
+            ) {
+              const url = match[1];
+              // Decode HTML entities in title
+              const title = match[2]
                 .replace(/&amp;/g, '&')
                 .replace(/&lt;/g, '<')
                 .replace(/&gt;/g, '>')
@@ -970,21 +1144,43 @@ async function webSearch(query, limit = 5) {
                 .replace(/&apos;/g, "'")
                 .replace(/<[^>]+>/g, '')
                 .trim();
+
+              // Find snippet after this link
+              const snippetMatch = body
+                .substring(match.index)
+                .match(snippetRegex);
+              let snippet = '';
+              if (snippetMatch) {
+                snippet = snippetMatch[1]
+                  .replace(/&amp;/g, '&')
+                  .replace(/&lt;/g, '<')
+                  .replace(/&gt;/g, '>')
+                  .replace(/&quot;/g, '"')
+                  .replace(/&#039;/g, "'")
+                  .replace(/&apos;/g, "'")
+                  .replace(/<[^>]+>/g, '')
+                  .trim();
+              }
+
+              // Validate result
+              if (
+                url &&
+                title &&
+                !url.includes('duckduckgo') &&
+                url.startsWith('http')
+              ) {
+                results.push({ title, url, snippet });
+              }
             }
 
-            // Validate result
-            if (url && title && !url.includes('duckduckgo') && url.startsWith('http')) {
-              results.push({ title, url, snippet });
-            }
+            resolve(results);
+          } catch (e) {
+            console.error(`Web search parse error: ${e.message}`);
+            resolve([]);
           }
-
-          resolve(results);
-        } catch (e) {
-          console.error(`Web search parse error: ${e.message}`);
-          resolve([]);
-        }
-      });
-    });
+        });
+      },
+    );
 
     req.onerror = () => {
       console.error('Web search request failed');
@@ -1004,32 +1200,36 @@ async function webFetch(url) {
     const parsedUrl = new URL(url);
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
-    const req = protocol.request({
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-      path: parsedUrl.pathname + parsedUrl.search,
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-      }
-    }, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        // Extract text content (simple approach)
-        const text = body
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-          .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-          .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-          .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+    const req = protocol.request(
+      {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'GET',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        },
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          // Extract text content (simple approach)
+          const text = body
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+            .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+            .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
 
-        resolve(text.substring(0, 3000)); // Limit to 3k chars
-      });
-    });
+          resolve(text.substring(0, 3000)); // Limit to 3k chars
+        });
+      },
+    );
 
     req.onerror = () => resolve('');
     req.setTimeout(10000, () => {
@@ -1046,27 +1246,68 @@ async function webFetch(url) {
 
 // Commands that run without confirmation
 const SAFE_COMMANDS = [
-  'git status', 'git diff', 'git log', 'git branch', 'git show',
-  'npm test', 'npm run', 'npm list', 'npm outdated', 'npm ls',
-  'ls', 'cat', 'head', 'tail', 'grep', 'find', 'pwd', 'cd',
-  'node -v', 'npm -v', 'git --version', 'python --version',
-  'git remote -v', 'git stash list', 'git tag', 'git describe'
+  'git status',
+  'git diff',
+  'git log',
+  'git branch',
+  'git show',
+  'npm test',
+  'npm run',
+  'npm list',
+  'npm outdated',
+  'npm ls',
+  'ls',
+  'cat',
+  'head',
+  'tail',
+  'grep',
+  'find',
+  'pwd',
+  'cd',
+  'node -v',
+  'npm -v',
+  'git --version',
+  'python --version',
+  'git remote -v',
+  'git stash list',
+  'git tag',
+  'git describe',
 ];
 
 // Commands that need confirmation
 const DANGEROUS_COMMANDS = [
   { cmd: 'rm', patterns: [/^rm\s+/], danger: 'delete files' },
   { cmd: 'rmdir', patterns: [/^rmdir\s+/], danger: 'delete directories' },
-  { cmd: 'git reset', patterns: [/^git reset\s+--hard/, /^git reset\s+--mixed/], danger: 'reset changes' },
-  { cmd: 'git checkout', patterns: [/^git checkout\s+-\.\s*/, /^git checkout\s+[^-]/], danger: 'discard local changes' },
-  { cmd: 'git push', patterns: [/^git push\s+(-f|--force)/], danger: 'force push' },
-  { cmd: 'git clean', patterns: [/^git clean\s+/], danger: 'remove untracked files' },
-  { cmd: 'chmod', patterns: [/^chmod\s+[0-7][0-7][0-7]/], danger: 'change file permissions' },
+  {
+    cmd: 'git reset',
+    patterns: [/^git reset\s+--hard/, /^git reset\s+--mixed/],
+    danger: 'reset changes',
+  },
+  {
+    cmd: 'git checkout',
+    patterns: [/^git checkout\s+-\.\s*/, /^git checkout\s+[^-]/],
+    danger: 'discard local changes',
+  },
+  {
+    cmd: 'git push',
+    patterns: [/^git push\s+(-f|--force)/],
+    danger: 'force push',
+  },
+  {
+    cmd: 'git clean',
+    patterns: [/^git clean\s+/],
+    danger: 'remove untracked files',
+  },
+  {
+    cmd: 'chmod',
+    patterns: [/^chmod\s+[0-7][0-7][0-7]/],
+    danger: 'change file permissions',
+  },
 ];
 
 function isSafeCommand(fullCmd) {
   const baseCmd = fullCmd.trim().split(/\s+/)[0];
-  return SAFE_COMMANDS.some(safe => {
+  return SAFE_COMMANDS.some((safe) => {
     if (safe.includes(' ')) return fullCmd.trim().startsWith(safe);
     return baseCmd === safe;
   });
@@ -1074,15 +1315,15 @@ function isSafeCommand(fullCmd) {
 
 function isDangerousCommand(fullCmd) {
   const baseCmd = fullCmd.trim().split(/\s+/)[0];
-  return DANGEROUS_COMMANDS.some(d => {
+  return DANGEROUS_COMMANDS.some((d) => {
     if (d.cmd !== baseCmd) return false;
-    return d.patterns.some(p => p.test(fullCmd));
+    return d.patterns.some((p) => p.test(fullCmd));
   });
 }
 
 function getDangerWarning(fullCmd) {
   const baseCmd = fullCmd.trim().split(/\s+/)[0];
-  const danger = DANGEROUS_COMMANDS.find(d => d.cmd === baseCmd);
+  const danger = DANGEROUS_COMMANDS.find((d) => d.cmd === baseCmd);
   return danger ? danger.danger : 'potentially destructive operation';
 }
 
@@ -1091,14 +1332,14 @@ function runCommand(cmd, projectDir = process.cwd()) {
     const proc = spawn(cmd, {
       cwd: projectDir,
       shell: true,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', d => stdout += d.toString());
-    proc.stderr.on('data', d => stderr += d.toString());
+    proc.stdout.on('data', (d) => (stdout += d.toString()));
+    proc.stderr.on('data', (d) => (stderr += d.toString()));
 
     proc.on('close', (code) => {
       if (code !== 0) {
@@ -1136,7 +1377,10 @@ async function gitCommit(message, amend = false) {
 async function gitAutoCommit() {
   const status = await gitStatus();
   if (!status.status.trim()) {
-    return { success: false, message: 'Nothing to commit - working tree clean' };
+    return {
+      success: false,
+      message: 'Nothing to commit - working tree clean',
+    };
   }
 
   // Get staged changes or all changes
@@ -1145,10 +1389,16 @@ async function gitAutoCommit() {
 
   // Generate commit message from changes
   const changes = staged || unstaged;
-  const filesChanged = (changes.match(/\.\.\..*\.js|\.\.\..*\.ts|\.\.\..*\.py/g) || []).length;
-  const type = changes.includes('| 0') ? 'chore' :
-               changes.includes('+') && changes.includes('-') ? 'fix' :
-               changes.includes('+++') ? 'feat' : 'update';
+  const filesChanged = (
+    changes.match(/\.\.\..*\.js|\.\.\..*\.ts|\.\.\..*\.py/g) || []
+  ).length;
+  const type = changes.includes('| 0')
+    ? 'chore'
+    : changes.includes('+') && changes.includes('-')
+      ? 'fix'
+      : changes.includes('+++')
+        ? 'feat'
+        : 'update';
 
   const message = `${type}: ${filesChanged} file${filesChanged !== 1 ? 's' : ''} updated`;
 
@@ -1161,13 +1411,17 @@ async function gitAutoCommit() {
 }
 
 async function gitPush(force = false) {
-  const branch = await runCommand('git branch --show-current').catch(() => 'main');
+  const branch = await runCommand('git branch --show-current').catch(
+    () => 'main',
+  );
   const cmd = `git push ${force ? '-f' : ''} origin ${branch.trim()}`;
   return runCommand(cmd);
 }
 
 async function gitLog(limit = 10) {
-  return runCommand(`git log --oneline -${limit} --pretty=format:"%h %s (%an)"`);
+  return runCommand(
+    `git log --oneline -${limit} --pretty=format:"%h %s (%an)"`,
+  );
 }
 
 // ============================================================================
@@ -1204,12 +1458,18 @@ function matchSkill(query) {
 
   for (const skill of skills.skills) {
     // Check explicit triggers
-    if (skill.triggers && skill.triggers.some(t => query.toLowerCase().includes(t.toLowerCase()))) {
+    if (
+      skill.triggers &&
+      skill.triggers.some((t) => query.toLowerCase().includes(t.toLowerCase()))
+    ) {
       return { skill, reason: 'trigger match' };
     }
 
     // Check if skill purpose matches query context
-    if (skill.keywords && skill.keywords.some(k => query.toLowerCase().includes(k.toLowerCase()))) {
+    if (
+      skill.keywords &&
+      skill.keywords.some((k) => query.toLowerCase().includes(k.toLowerCase()))
+    ) {
       return { skill, reason: 'keyword match' };
     }
   }
@@ -1243,8 +1503,11 @@ Example:
 
   try {
     const response = await askOllama([
-      { role: 'system', content: 'You are a JSON parser. Output only valid JSON.' },
-      { role: 'user', content: prompt }
+      {
+        role: 'system',
+        content: 'You are a JSON parser. Output only valid JSON.',
+      },
+      { role: 'user', content: prompt },
     ]);
 
     const json = response.message?.content;
@@ -1256,7 +1519,7 @@ Example:
       system_prompt: parsed.system_prompt || 'You are a helpful assistant.',
       triggers: parsed.triggers || [],
       keywords: parsed.keywords || [],
-      createdAt: Date.now()
+      createdAt: Date.now(),
     };
   } catch (e) {
     return null;
@@ -1265,7 +1528,7 @@ Example:
 
 function deleteSkill(name) {
   const data = loadSkills();
-  const idx = data.skills.findIndex(s => s.name === name);
+  const idx = data.skills.findIndex((s) => s.name === name);
   if (idx === -1) return false;
   data.skills.splice(idx, 1);
   saveSkills(data);
@@ -1324,8 +1587,11 @@ IMPORTANT: Return the complete file content with improvements applied. Do not us
 
   try {
     const response = await askOllama([
-      { role: 'system', content: 'You are a code improver. Output ONLY valid JSON.' },
-      { role: 'user', content: improvementPrompt }
+      {
+        role: 'system',
+        content: 'You are a code improver. Output ONLY valid JSON.',
+      },
+      { role: 'user', content: improvementPrompt },
     ]);
 
     const jsonMatch = response.message?.content.match(/\{[\s\S]*\}/);
@@ -1335,7 +1601,9 @@ IMPORTANT: Return the complete file content with improvements applied. Do not us
         const success = await writeSelfFile('assistant.js', parsed.code);
         return {
           success,
-          message: success ? `Applied: ${parsed.explanation || 'changes applied'}` : 'Failed to write changes'
+          message: success
+            ? `Applied: ${parsed.explanation || 'changes applied'}`
+            : 'Failed to write changes',
         };
       }
     }
@@ -1346,7 +1614,10 @@ IMPORTANT: Return the complete file content with improvements applied. Do not us
     if (explanation) {
       return { success: false, message: `JSON parse failed. ${explanation}` };
     }
-    return { success: false, message: 'Could not parse response - invalid JSON format' };
+    return {
+      success: false,
+      message: 'Could not parse response - invalid JSON format',
+    };
   } catch (e) {
     return { success: false, message: `Error: ${e.message}` };
   }
@@ -1380,8 +1651,11 @@ Respond with ONLY JSON (no markdown):
 
   try {
     const response = await askOllama([
-      { role: 'system', content: 'You are a code reviewer. Output ONLY valid JSON.' },
-      { role: 'user', content: reflectionPrompt }
+      {
+        role: 'system',
+        content: 'You are a code reviewer. Output ONLY valid JSON.',
+      },
+      { role: 'user', content: reflectionPrompt },
     ]);
 
     const jsonMatch = response.message?.content.match(/\{[\s\S]*\}/);
@@ -1391,7 +1665,10 @@ Respond with ONLY JSON (no markdown):
         return { success: true, analysis: parsed };
       }
     }
-    return { success: false, message: 'Could not parse response - invalid JSON format' };
+    return {
+      success: false,
+      message: 'Could not parse response - invalid JSON format',
+    };
   } catch (e) {
     return { success: false, message: `Error: ${e.message}` };
   }
@@ -1411,30 +1688,38 @@ function askOllama(messages) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify({ model: MODEL, messages, stream: false });
 
-    const req = http.request({
-      hostname: new URL(OLLAMA_HOST).hostname,
-      port: new URL(OLLAMA_HOST).port || 11434,
-      path: '/api/chat',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-    }, (res) => {
-      // Handle HTTP error status codes
-      if (res.statusCode !== 200) {
-        return reject(new Error(`HTTP error: ${res.statusCode}`));
-      }
-
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('error', (err) => reject(new Error(`Response error: ${err.message}`)));
-      res.on('end', () => {
-        const parsed = safeJsonParse(body);
-        if (parsed) {
-          resolve(parsed);
-        } else {
-          reject(new Error('Failed to parse API response'));
+    const req = http.request(
+      {
+        hostname: new URL(OLLAMA_HOST).hostname,
+        port: new URL(OLLAMA_HOST).port || 11434,
+        path: '/api/chat',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data),
+        },
+      },
+      (res) => {
+        // Handle HTTP error status codes
+        if (res.statusCode !== 200) {
+          return reject(new Error(`HTTP error: ${res.statusCode}`));
         }
-      });
-    });
+
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('error', (err) =>
+          reject(new Error(`Response error: ${err.message}`)),
+        );
+        res.on('end', () => {
+          const parsed = safeJsonParse(body);
+          if (parsed) {
+            resolve(parsed);
+          } else {
+            reject(new Error('Failed to parse API response'));
+          }
+        });
+      },
+    );
 
     req.onerror = () => reject(new Error('Request failed'));
     req.setTimeout(30000, () => {
@@ -1452,14 +1737,14 @@ async function askWithMemory(userMessage, systemPrompt) {
   let contextPrompt = systemPrompt;
   if (relevantMemories.length > 0) {
     const memText = relevantMemories
-      .map(m => `  - [${m.category}] ${m.text}`)
+      .map((m) => `  - [${m.category}] ${m.text}`)
       .join('\n');
     contextPrompt += `\n\n<relevant-memories>\nThese memories may be relevant:\n${memText}\n</relevant-memories>`;
   }
 
   const response = await askOllama([
     { role: 'system', content: contextPrompt },
-    { role: 'user', content: userMessage }
+    { role: 'user', content: userMessage },
   ]);
 
   return { response, relevantMemories };
@@ -1481,16 +1766,35 @@ async function chat() {
     if (trimmed.startsWith('/')) {
       const cmdPart = trimmed.slice(1).toLowerCase();
       const commands = [
-        '/profile', '/edit', '/idle', '/verbose', '/run', '/git', '/skill',
-        '/track', '/search', '/fetch', '/browser', '/workspace', '/claude',
-        '/self', '/memories', '/forget', '/memory', '/clear', '/models',
-        '/quit', '/exit', '/help'
+        '/profile',
+        '/edit',
+        '/idle',
+        '/verbose',
+        '/run',
+        '/git',
+        '/skill',
+        '/track',
+        '/search',
+        '/fetch',
+        '/browser',
+        '/workspace',
+        '/claude',
+        '/self',
+        '/memories',
+        '/forget',
+        '/memory',
+        '/clear',
+        '/models',
+        '/quit',
+        '/exit',
+        '/help',
       ];
-      const matches = commands.filter(cmd =>
-        cmd.toLowerCase().includes('/' + cmdPart) ||
-        cmd.toLowerCase().endsWith(cmdPart)
+      const matches = commands.filter(
+        (cmd) =>
+          cmd.toLowerCase().includes('/' + cmdPart) ||
+          cmd.toLowerCase().endsWith(cmdPart),
       );
-      return [matches.length ? matches.map(m => m + ' ') : [], line];
+      return [matches.length ? matches.map((m) => m + ' ') : [], line];
     }
 
     // @ tracker mention completions
@@ -1498,16 +1802,19 @@ async function chat() {
       const mentionPart = trimmed.slice(1).toLowerCase();
       const trackStore = new TrackerStore();
       const trackers = trackStore.listTrackers();
-      const trackerMatches = trackers.filter(t =>
-        t.name.toLowerCase().startsWith(mentionPart) ||
-        t.displayName.toLowerCase().includes(mentionPart)
-      ).map(t => '@' + t.name + ' ');
+      const trackerMatches = trackers
+        .filter(
+          (t) =>
+            t.name.toLowerCase().startsWith(mentionPart) ||
+            t.displayName.toLowerCase().includes(mentionPart),
+        )
+        .map((t) => '@' + t.name + ' ');
 
       // Also include workspaces
       const workspaces = listWorkspaces();
-      const wsMatches = workspaces.filter(w =>
-        w.toLowerCase().startsWith(mentionPart)
-      ).map(w => '@' + w + ' ');
+      const wsMatches = workspaces
+        .filter((w) => w.toLowerCase().startsWith(mentionPart))
+        .map((w) => '@' + w + ' ');
 
       return [trackerMatches.concat(wsMatches), line];
     }
@@ -1518,7 +1825,7 @@ async function chat() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    completer: completer
+    completer: completer,
   });
 
   // Check and build profile if needed
@@ -1534,7 +1841,7 @@ async function chat() {
   setStats({
     trackersActive: trackers.length,
     memoriesStored: mems.length,
-    workoutsLogged: 0
+    workoutsLogged: 0,
   });
 
   // Show companion greeting
@@ -1561,7 +1868,7 @@ async function chat() {
   console.log('    /track     - Custom tracking (workouts, food, habits)');
   console.log('    /search    - Web search');
   console.log('    /fetch     - Get webpage content');
-  console.log('    /browser   - Browser automation (uses ClawdBot\'s Chrome)');
+  console.log("    /browser   - Browser automation (uses ClawdBot's Chrome)");
   console.log('    /workspace - Workspace management & subagent spawning');
   console.log('    /claude    - Run Claude Code CLI in a directory');
   console.log('    /self      - Self-improve commands');
@@ -1574,19 +1881,44 @@ async function chat() {
   console.log('    /quit      - Exit');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('  Quick Actions:');
-  console.log('    @tracker   - Query trackers (e.g., @matt stats, @matt how am I doing?)');
+  console.log(
+    '    @tracker   - Query trackers (e.g., @matt stats, @matt how am I doing?)',
+  );
   console.log('    @workspace - Switch workspace context');
   console.log('    !<cmd>     - Run shell command');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log();
 
   let quitResolve;
-  const quitPromise = new Promise(r => { quitResolve = r; });
+  const quitPromise = new Promise((r) => {
+    quitResolve = r;
+  });
 
   const askQuestion = () => {
     rl.question('\x1b[36mYou:\x1b[0m ', async (question) => {
       const q = question.trim();
-      if (q.toLowerCase() === '/quit' || q.toLowerCase() === '/exit' || q === '') {
+
+      // Check if we're in the middle of a follow-up question flow
+      if (isQuestionAnswer()) {
+        const result = await processAnswer(q);
+        if (result && result.handled) {
+          if (result.valid) {
+            // Question was answered and processed - show result if any
+            if (result.result?.result) {
+              console.log(`  \x1b[90m${result.result.result}\x1b[0m`);
+            }
+          }
+          // Continue to next question even if invalid (will re-ask)
+          askQuestion();
+          return;
+        }
+      }
+
+      if (
+        q.toLowerCase() === '/quit' ||
+        q.toLowerCase() === '/exit' ||
+        q === ''
+      ) {
         console.log('\nGoodbye!\n');
         rl.close();
         quitResolve();
@@ -1599,22 +1931,49 @@ async function chat() {
         const cmd = parts[0].toLowerCase();
         const arg = parts.slice(1).join(' ');
 
-        // Check for risky actions that need confirmation
+        // Check for risky actions that need confirmation - use new follow-up system
         const riskyCheck = checkRiskyAction(q);
         if (riskyCheck) {
-          console.log(`\n  \x1b[33m⚠️  ${riskyCheck.message}\x1b[0m`);
-          const confirmed = await askYesNo('Continue?', false);
-          if (!confirmed) {
-            console.log('  Cancelled.\n');
-            askQuestion();
-            return;
-          }
+          startQuestionFlow(
+            createConfirmQuestion(
+              riskyCheck.action,
+              { message: riskyCheck.message, risk: riskyCheck.risk },
+              {
+                context: `Command: ${q}`,
+                onConfirm: async () => {
+                  console.log(`\n  \x1b[36m→ Executing: ${q}\x1b[0m`);
+                  // The command will continue processing after confirmation
+                  return 'Action confirmed and executed';
+                },
+                onCancel: () => {
+                  console.log('  \x1b[90mCancelled.\x1b[0m');
+                  return 'Action cancelled';
+                },
+              },
+            ),
+            { command: q, riskyCheck },
+          );
+          askQuestion();
+          return;
         }
 
-        // Check if clarification is needed
+        // Check if clarification is needed - use new follow-up system
         const clarificationCheck = checkNeedsClarification(q);
         if (clarificationCheck) {
-          console.log(`\n  \x1b[33m${clarificationCheck.question}\x1b[0m`);
+          startQuestionFlow(
+            createTextQuestion(clarificationCheck.question, {
+              context: `Command: ${q}`,
+              hint: 'Please provide the missing information',
+              onAnswer: (answer, ctx) => {
+                // Re-process the command with the additional info
+                console.log(
+                  `\n  \x1b[36m→ Re-processing: ${ctx.command} ${answer}\x1b[0m`,
+                );
+                return `Received: ${answer}`;
+              },
+            }),
+            { command: q, clarificationCheck },
+          );
           askQuestion();
           return;
         }
@@ -1635,24 +1994,34 @@ async function chat() {
           if (isCliActive) {
             console.log('\n  CLI active - Telegram paused.\n');
           } else {
-            console.log('\n  Telegram active - Send a message on Telegram to test!\n');
+            console.log(
+              '\n  Telegram active - Send a message on Telegram to test!\n',
+            );
           }
         } else if (cmd === '/verbose') {
           // Toggle verbose mode
           global.VERBOSE_MODE = !global.VERBOSE_MODE;
-          console.log(`\n  Verbose mode: ${global.VERBOSE_MODE ? 'ON' : 'OFF'}\n`);
+          console.log(
+            `\n  Verbose mode: ${global.VERBOSE_MODE ? 'ON' : 'OFF'}\n`,
+          );
         } else if (cmd === '/memories') {
           const mems = memory.list();
           if (mems.length === 0) {
             console.log('\n  No memories stored.\n');
           } else {
             console.log(`\n  Memories (${mems.length} total):`);
-            mems.forEach(m => {
+            mems.forEach((m) => {
               const date = new Date(m.createdAt).toLocaleDateString('en-US', {
-                weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
               });
               const score = m.score ? ` [${(m.score * 100).toFixed(0)}%]` : '';
-              console.log(`  [${m.id.slice(0, 8)}]${score} ${m.text.slice(0, 40)}${m.text.length > 40 ? '...' : ''} (${date})`);
+              console.log(
+                `  [${m.id.slice(0, 8)}]${score} ${m.text.slice(0, 40)}${m.text.length > 40 ? '...' : ''} (${date})`,
+              );
             });
             console.log();
           }
@@ -1670,7 +2039,9 @@ async function chat() {
             console.log('\n  Memory stored!\n');
           } else {
             console.log('\n  Usage: /memory <text to remember>\n');
-            console.log('  Example: /memory I prefer TypeScript over JavaScript\n');
+            console.log(
+              '  Example: /memory I prefer TypeScript over JavaScript\n',
+            );
           }
         } else if (cmd === '/clear') {
           await memory.clear();
@@ -1684,7 +2055,7 @@ async function chat() {
           if (action === 'list' || !action) {
             const companions = getAvailableCompanions();
             console.log('\n  Available Companions:\n');
-            companions.forEach(c => {
+            companions.forEach((c) => {
               console.log(`  ${c.emoji} ${c.name} (/${c.id})`);
             });
             console.log('\n  Commands:');
@@ -1695,31 +2066,44 @@ async function chat() {
           } else if (action === 'set' && param) {
             if (setCompanion(param)) {
               reactToEvent('greeting');
-              console.log(`\n  Your new companion is ${getCompanion(param).name}!\n`);
+              console.log(
+                `\n  Your new companion is ${getCompanion(param).name}!\n`,
+              );
             } else {
-              console.log(`\n  Companion "${param}" not found. Try /companion list\n`);
+              console.log(
+                `\n  Companion "${param}" not found. Try /companion list\n`,
+              );
             }
           } else if (action === 'show') {
             toggleVisibility(true);
             showCompanionUI();
           } else if (action === 'hide') {
             toggleVisibility(false);
-            console.log('\n  Companion hidden. Use /companion show to bring them back.\n');
+            console.log(
+              '\n  Companion hidden. Use /companion show to bring them back.\n',
+            );
           } else if (action === 'stats') {
             toggleStats();
             const stats = getAvailableCompanions();
-            console.log(`\n  Stats display ${showStats ? 'enabled' : 'disabled'}.\n`);
+            console.log(
+              `\n  Stats display ${showStats ? 'enabled' : 'disabled'}.\n`,
+            );
           } else {
             console.log('\n  Usage: /companion [list|set|show|hide|stats]\n');
           }
         } else if (cmd === '/models') {
           console.log('\n  Available models:');
           const specs = {
-            'qwen3-coder': 'coding', 'qwen2.5-coder': 'coding', 'deepseek-coder': 'coding',
-            'deepseek-r1': 'reasoning', 'qwen2.5': 'general', 'mistral': 'reasoning',
-            'llama3.2': 'general', 'llama3.1': 'general'
+            'qwen3-coder': 'coding',
+            'qwen2.5-coder': 'coding',
+            'deepseek-coder': 'coding',
+            'deepseek-r1': 'reasoning',
+            'qwen2.5': 'general',
+            mistral: 'reasoning',
+            'llama3.2': 'general',
+            'llama3.1': 'general',
           };
-          availableModels.forEach(m => {
+          availableModels.forEach((m) => {
             console.log(`  - ${m} (${specs[m] || 'unknown'})`);
           });
           console.log();
@@ -1728,7 +2112,9 @@ async function chat() {
           const fullCmd = arg;
           if (!fullCmd) {
             console.log('\n  Usage: /run <command>\n');
-            console.log('  Safe commands run automatically. Dangerous ones prompt for confirmation.\n');
+            console.log(
+              '  Safe commands run automatically. Dangerous ones prompt for confirmation.\n',
+            );
             console.log('  Examples:');
             console.log('    /run npm test');
             console.log('    /run git status');
@@ -1745,35 +2131,37 @@ async function chat() {
               }
             } else if (isDangerousCommand(fullCmd)) {
               const warning = getDangerWarning(fullCmd);
-              console.log(`\n  \x1b[33m⚠️  This command: ${warning}\x1b[0m`);
-              console.log(`  Command: ${fullCmd}\n`);
-              const answer = await new Promise(resolve => {
-                rl.question('  Run anyway? (y/n/danger always): ', resolve);
-              });
-              if (answer.toLowerCase() === 'y') {
-                console.log(`\n  \x1b[36m→ Running...\x1b[0m\n`);
-                try {
-                  const output = await runCommand(fullCmd);
-                  console.log(output || '(no output)');
-                  console.log();
-                } catch (e) {
-                  console.log(`  \x1b[31mError: ${e.message}\x1b[0m\n`);
-                }
-              } else if (answer.toLowerCase() === 'danger always') {
-                console.log('\n  \x1b[33m⚠️  Bypassing safety for this session.\x1b[0m\n');
-                global.DANGER_ALWAYS = true;
-                try {
-                  const output = await runCommand(fullCmd);
-                  console.log(output || '(no output)');
-                  console.log();
-                } catch (e) {
-                  console.log(`  \x1b[31mError: ${e.message}\x1b[0m\n`);
-                }
-              } else {
-                console.log('  \x1b[90mCancelled.\x1b[0m\n');
-              }
+              // Use new follow-up system for dangerous commands
+              startQuestionFlow(
+                createConfirmQuestion(
+                  `run "${fullCmd}"`,
+                  { message: warning, risk: 'high' },
+                  {
+                    context: 'Dangerous command execution',
+                    onConfirm: async () => {
+                      console.log(`\n  \x1b[36m→ Running: ${fullCmd}\x1b[0m\n`);
+                      try {
+                        const output = await runCommand(fullCmd);
+                        console.log(output || '(no output)');
+                        console.log();
+                        return 'Command executed successfully';
+                      } catch (e) {
+                        console.log(`  \x1b[31mError: ${e.message}\x1b[0m\n`);
+                        throw e;
+                      }
+                    },
+                    onCancel: () => {
+                      console.log('  \x1b[90mCancelled.\x1b[0m\n');
+                      return 'Execution cancelled';
+                    },
+                  },
+                ),
+                { command: fullCmd, warning },
+              );
             } else if (global.DANGER_ALWAYS) {
-              console.log(`\n  \x1b[36m→ Running (danger bypass): ${fullCmd}\x1b[0m\n`);
+              console.log(
+                `\n  \x1b[36m→ Running (danger bypass): ${fullCmd}\x1b[0m\n`,
+              );
               try {
                 const output = await runCommand(fullCmd);
                 console.log(output || '(no output)');
@@ -1810,7 +2198,9 @@ async function chat() {
             }
             console.log();
           } else if (subCmd === 'diff') {
-            const diff = await gitDiff(subArg === '--staged' || subArg === '-s');
+            const diff = await gitDiff(
+              subArg === '--staged' || subArg === '-s',
+            );
             console.log(diff || '(no changes)');
             console.log();
           } else if (subCmd === 'commit') {
@@ -1819,7 +2209,10 @@ async function chat() {
               const result = await gitAutoCommit();
               console.log(`  ${result.message}\n`);
             } else {
-              const result = await gitCommit(subArg.replace(/^["']|["']$/g, ''), subArg.includes('--amend'));
+              const result = await gitCommit(
+                subArg.replace(/^["']|["']$/g, ''),
+                subArg.includes('--amend'),
+              );
               console.log(`  \x1b[32mCommitted!\x1b[0m\n`);
             }
           } else if (subCmd === 'push') {
@@ -1838,7 +2231,9 @@ async function chat() {
             console.log('    /git status    - Current branch and changes');
             console.log('    /git diff      - Unstaged changes');
             console.log('    /git diff -s   - Staged changes');
-            console.log('    /git commit    - Auto-commit with generated message');
+            console.log(
+              '    /git commit    - Auto-commit with generated message',
+            );
             console.log('    /git push      - Push current branch');
             console.log('    /git push -f   - Force push');
             console.log('    /git log       - Recent commits\n');
@@ -1855,16 +2250,20 @@ async function chat() {
             if (skills.length === 0) {
               console.log('    No skills defined.\n');
             } else {
-              skills.forEach(s => {
+              skills.forEach((s) => {
                 console.log(`  - ${s.name}: ${s.purpose}`);
-                console.log(`    Triggers: ${s.triggers?.join(', ') || 'none'}`);
+                console.log(
+                  `    Triggers: ${s.triggers?.join(', ') || 'none'}`,
+                );
               });
               console.log();
             }
           } else if (action === 'create') {
             const description = skillArgs.slice(1).join(' ');
             if (!description) {
-              console.log('\n  Usage: /skill create "I want a skill that helps me write blog posts in my voice"\n');
+              console.log(
+                '\n  Usage: /skill create "I want a skill that helps me write blog posts in my voice"\n',
+              );
             } else {
               console.log(`\n  Creating skill from: "${description}"\n`);
               const skill = await parseSkillFromNaturalLanguage(description);
@@ -1951,7 +2350,9 @@ async function chat() {
           if (action === 'goto' && param) {
             console.log(`\n  \x1b[36mNavigating: ${param}\x1b[0m\n`);
             const success = await browserNavigate(param);
-            console.log(success ? '  Done.\n' : '  Failed (CDP not available).\n');
+            console.log(
+              success ? '  Done.\n' : '  Failed (CDP not available).\n',
+            );
           } else if (action === 'content') {
             console.log('\n  Getting page content...\n');
             const result = await browserGetPageContent();
@@ -1984,7 +2385,7 @@ async function chat() {
               console.log('\n  [...truncated]\n');
             }
           } else if (action === 'help' || !action) {
-            console.log('\n  Browser Commands (uses ClawdBot\'s Chrome):\n');
+            console.log("\n  Browser Commands (uses ClawdBot's Chrome):\n");
             console.log('    /browser goto <url>    - Navigate to URL');
             console.log('    /browser content       - Get current page text');
             console.log('    /browser screenshot    - Save screenshot to /tmp');
@@ -2005,12 +2406,14 @@ async function chat() {
             if (workspaces.length === 0) {
               console.log('    No workspaces found.\n');
             } else {
-              workspaces.forEach(w => {
+              workspaces.forEach((w) => {
                 const wsPath = path.join(WORKSPACES_DIR, w);
                 try {
-                  const files = fs.readdirSync(wsPath).filter(f =>
-                    !f.startsWith('.') && !f.includes('node_modules')
-                  );
+                  const files = fs
+                    .readdirSync(wsPath)
+                    .filter(
+                      (f) => !f.startsWith('.') && !f.includes('node_modules'),
+                    );
                   console.log(`  • ${w} (${files.length} files)`);
                 } catch {
                   console.log(`  • ${w}`);
@@ -2038,9 +2441,15 @@ async function chat() {
             if (!workspaceInput || !task) {
               console.log('\n  Usage: /workspace run <workspace> <task>\n');
               console.log('  Examples:');
-              console.log('    /workspace run my-saas "add user authentication"');
-              console.log('    /workspace run ~/projects/my-app "fix the auth bug"');
-              console.log('    /workspace run /Users/me/code/my-project "review this code"\n');
+              console.log(
+                '    /workspace run my-saas "add user authentication"',
+              );
+              console.log(
+                '    /workspace run ~/projects/my-app "fix the auth bug"',
+              );
+              console.log(
+                '    /workspace run /Users/me/code/my-project "review this code"\n',
+              );
             } else {
               // Handle absolute paths
               let wsPath;
@@ -2053,7 +2462,9 @@ async function chat() {
                   workspaceInput = parts[1];
                   task = parts.slice(2).join(' ');
                 } else {
-                  console.log('\n  Usage: /workspace run --claude <path> <task>\n');
+                  console.log(
+                    '\n  Usage: /workspace run --claude <path> <task>\n',
+                  );
                   askQuestion();
                   return;
                 }
@@ -2085,23 +2496,47 @@ async function chat() {
                   const result = await runClaudeSubagent(task, wsPath);
                   console.log('\x1b[32mResult:\x1b[0m ');
                   console.log(result.output);
-                  console.log(`\n  \x1b[90m(${((Date.now() - startTime) / 1000).toFixed(1)}s | ${wsPath})\x1b[0m\n`);
+                  console.log(
+                    `\n  \x1b[90m(${((Date.now() - startTime) / 1000).toFixed(1)}s | ${wsPath})\x1b[0m\n`,
+                  );
                 } catch (err) {
-                  console.log(`\n  \x1b[31mClaude Code failed: ${err.message}\x1b[0m\n`);
+                  console.log(
+                    `\n  \x1b[31mClaude Code failed: ${err.message}\x1b[0m\n`,
+                  );
                   console.log('  Falling back to Ollama...\n');
-                  const model = await selectBestModel('coding', availableModels);
-                  const result = await runOllamaSubagent(task, model, systemPrompt, wsPath);
+                  const model = await selectBestModel(
+                    'coding',
+                    availableModels,
+                  );
+                  const result = await runOllamaSubagent(
+                    task,
+                    model,
+                    systemPrompt,
+                    wsPath,
+                  );
                   console.log('\x1b[32mResult:\x1b[0m ');
                   console.log(result.output);
-                  console.log(`\n  \x1b[90m(${((Date.now() - startTime) / 1000).toFixed(1)}s | ${wsPath})\x1b[0m\n`);
+                  console.log(
+                    `\n  \x1b[90m(${((Date.now() - startTime) / 1000).toFixed(1)}s | ${wsPath})\x1b[0m\n`,
+                  );
                 }
               } else {
                 const delegation = shouldDelegate(task);
-                const model = await selectBestModel(delegation.type || 'coding', availableModels);
+                const model = await selectBestModel(
+                  delegation.type || 'coding',
+                  availableModels,
+                );
 
-                console.log(`\n  \x1b[33m[Running at: ${wsPath} | Model: ${model}]\x1b[0m\n`);
+                console.log(
+                  `\n  \x1b[33m[Running at: ${wsPath} | Model: ${model}]\x1b[0m\n`,
+                );
 
-                const result = await runOllamaSubagent(task, model, systemPrompt, wsPath);
+                const result = await runOllamaSubagent(
+                  task,
+                  model,
+                  systemPrompt,
+                  wsPath,
+                );
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
                 console.log('\x1b[32mResult:\x1b[0m ');
@@ -2112,11 +2547,13 @@ async function chat() {
           } else if (action === 'files' && param) {
             const wsPath = getWorkspacePath(param);
             try {
-              const files = fs.readdirSync(wsPath).filter(f =>
-                !f.startsWith('.') && !f.includes('node_modules')
-              );
+              const files = fs
+                .readdirSync(wsPath)
+                .filter(
+                  (f) => !f.startsWith('.') && !f.includes('node_modules'),
+                );
               console.log(`\n  Files in ${param}:\n`);
-              files.forEach(f => console.log(`  • ${f}`));
+              files.forEach((f) => console.log(`  • ${f}`));
               console.log();
             } catch (e) {
               console.log(`\n  Could not access workspace: ${param}\n`);
@@ -2126,24 +2563,46 @@ async function chat() {
             if (fs.existsSync(wsPath)) {
               console.log(`\n  \x1b[36mOpening workspace: ${param}\x1b[0m\n`);
               console.log(`  Path: ${wsPath}\n`);
-              console.log('  You can now use /workspace run to execute tasks here.\n');
+              console.log(
+                '  You can now use /workspace run to execute tasks here.\n',
+              );
             } else {
               console.log(`\n  Workspace not found: ${param}\n`);
             }
           } else if (action === 'help' || !action) {
             console.log('\n  Workspace Commands:\n');
-            console.log('    /workspace list                 - List all workspaces');
-            console.log('    /workspace create <name>        - Create new workspace');
-            console.log('    /workspace run <path> <task>    - Run task in workspace or existing dir');
-            console.log('    /workspace run --claude <path> <task> - Run with Claude Code CLI');
-            console.log('    /workspace files <path>         - List files in workspace');
-            console.log('    /workspace open <path>          - Show workspace path\n');
+            console.log(
+              '    /workspace list                 - List all workspaces',
+            );
+            console.log(
+              '    /workspace create <name>        - Create new workspace',
+            );
+            console.log(
+              '    /workspace run <path> <task>    - Run task in workspace or existing dir',
+            );
+            console.log(
+              '    /workspace run --claude <path> <task> - Run with Claude Code CLI',
+            );
+            console.log(
+              '    /workspace files <path>         - List files in workspace',
+            );
+            console.log(
+              '    /workspace open <path>          - Show workspace path\n',
+            );
             console.log('  Examples:\n');
             console.log('    /workspace create my-saas');
-            console.log('    /workspace run my-saas "initialize a Next.js project"');
-            console.log('    /workspace run ~/projects/my-app "fix the auth bug"');
-            console.log('    /workspace run --claude /path/to/repo "add tests"\n');
-            console.log('  Supports: workspace names, ~/ paths, and absolute / paths\n');
+            console.log(
+              '    /workspace run my-saas "initialize a Next.js project"',
+            );
+            console.log(
+              '    /workspace run ~/projects/my-app "fix the auth bug"',
+            );
+            console.log(
+              '    /workspace run --claude /path/to/repo "add tests"\n',
+            );
+            console.log(
+              '  Supports: workspace names, ~/ paths, and absolute / paths\n',
+            );
           } else {
             console.log(`\n  Unknown workspace action: ${action}\n`);
           }
@@ -2156,10 +2615,14 @@ async function chat() {
           if (!pathArg || !task) {
             console.log('\n  Usage: /claude <path> <task>\n');
             console.log('  Examples:');
-            console.log('    /claude ~/projects/my-app "Explain the architecture"');
+            console.log(
+              '    /claude ~/projects/my-app "Explain the architecture"',
+            );
             console.log('    /claude /path/to/repo "Add user authentication"');
             console.log('    /claude . "Fix all TypeScript errors"\n');
-            console.log('  Uses Claude Code CLI with local Ollama model via LiteLLM.\n');
+            console.log(
+              '  Uses Claude Code CLI with local Ollama model via LiteLLM.\n',
+            );
           } else {
             // Handle paths
             let wsPath;
@@ -2192,7 +2655,12 @@ async function chat() {
                 // Fallback to Ollama subagent
                 console.log('  Falling back to Ollama-based subagent...\n');
                 const model = await selectBestModel('coding', availableModels);
-                const fallbackResult = await runOllamaSubagent(task, model, systemPrompt, wsPath);
+                const fallbackResult = await runOllamaSubagent(
+                  task,
+                  model,
+                  systemPrompt,
+                  wsPath,
+                );
                 console.log('\x1b[32mResult:\x1b[0m ');
                 console.log(fallbackResult.output);
                 console.log();
@@ -2210,7 +2678,9 @@ async function chat() {
             const result = await improveSelf(param);
             if (result.success) {
               console.log(`  \x1b[32m${result.message}\x1b[0m\n`);
-              console.log('  Restart me to see changes: Ctrl+C then npm start\n');
+              console.log(
+                '  Restart me to see changes: Ctrl+C then npm start\n',
+              );
             } else {
               console.log(`  \x1b[31mFailed: ${result.message}\x1b[0m\n`);
             }
@@ -2219,9 +2689,13 @@ async function chat() {
             const result = await selfReflect();
             if (result.success) {
               console.log(`  Self-rating: ${result.analysis.score}/10`);
-              console.log(`  Issues found: ${result.analysis.issues?.join(', ') || 'none'}\n`);
+              console.log(
+                `  Issues found: ${result.analysis.issues?.join(', ') || 'none'}\n`,
+              );
               console.log(`  Top priority: ${result.analysis.topPriority}`);
-              console.log(`  \x1b[36mSuggesting: ${result.analysis.suggestedChange}\x1b[0m\n`);
+              console.log(
+                `  \x1b[36mSuggesting: ${result.analysis.suggestedChange}\x1b[0m\n`,
+              );
               console.log('  Run: /improve "<suggestion>" to apply\n');
             } else {
               console.log(`  \x1b[31mFailed: ${result.message}\x1b[0m\n`);
@@ -2237,8 +2711,12 @@ async function chat() {
             }
           } else if (action === 'help' || !action) {
             console.log('\n  Self-Improvement Commands:\n');
-            console.log('    /self improve <request>  - Improve my code based on request');
-            console.log('    /self reflect           - Self-analyze for improvements');
+            console.log(
+              '    /self improve <request>  - Improve my code based on request',
+            );
+            console.log(
+              '    /self reflect           - Self-analyze for improvements',
+            );
             console.log('    /self read <file>       - Read source file\n');
             console.log('  Examples:');
             console.log('    /self improve add better error handling');
@@ -2266,26 +2744,36 @@ async function chat() {
             console.log('\n  Trackers:\n');
             if (trackers.length === 0) {
               console.log('    No trackers defined. Create one with:');
-              console.log('    /track create          - Start interactive wizard');
-              console.log('    /track create "query"  - Create from natural language\n');
+              console.log(
+                '    /track create          - Start interactive wizard',
+              );
+              console.log(
+                '    /track create "query"  - Create from natural language\n',
+              );
             } else {
-              trackers.forEach(t => {
+              trackers.forEach((t) => {
                 const records = trackStore.getRecords(t.name);
                 const count = records.records?.length || 0;
                 const persona = t.config?.persona;
-                console.log(`  • ${t.displayName} (@${t.name}) - ${count} entries`);
+                console.log(
+                  `  • ${t.displayName} (@${t.name}) - ${count} entries`,
+                );
                 console.log(`    Type: ${t.type}`);
                 if (persona?.name) {
                   console.log(`    Persona: ${persona.name}`);
                 }
-                console.log(`    Metrics: ${t.config.metrics?.join(', ') || 'none'}\n`);
+                console.log(
+                  `    Metrics: ${t.config.metrics?.join(', ') || 'none'}\n`,
+                );
               });
             }
           } else if (action === 'create' && !subAction) {
             // Launch interactive wizard
             const result = await runTrackerWizard(rl);
             if (result?.success) {
-              console.log(`  Your new tracker "@${result.tracker.name}" is ready!\n`);
+              console.log(
+                `  Your new tracker "@${result.tracker.name}" is ready!\n`,
+              );
             }
           } else if (action === 'create' && subAction) {
             // Create a new tracker from natural language
@@ -2300,33 +2788,53 @@ async function chat() {
               // Check if tracker name already exists
               const existingTracker = trackStore.getTracker(finalConfig.name);
               if (existingTracker) {
-                console.log(`\n  \x1b[31mA tracker named "@${finalConfig.name}" already exists.\x1b[0m`);
-                console.log('  Try a different name with: /track create "my tracker description"\n');
+                console.log(
+                  `\n  \x1b[31mA tracker named "@${finalConfig.name}" already exists.\x1b[0m`,
+                );
+                console.log(
+                  '  Try a different name with: /track create "my tracker description"\n',
+                );
                 return;
               }
 
               const result = trackStore.createTracker(finalConfig);
               if (result.success) {
-                console.log(`\n  \x1b[32mCreated tracker: ${finalConfig.displayName}\x1b[0m`);
+                console.log(
+                  `\n  \x1b[32mCreated tracker: ${finalConfig.displayName}\x1b[0m`,
+                );
                 console.log(`  Name: @${finalConfig.name}`);
                 console.log(`  Type: ${finalConfig.type}`);
-                console.log(`  Metrics: ${finalConfig.metrics?.join(', ') || 'none'}`);
+                console.log(
+                  `  Metrics: ${finalConfig.metrics?.join(', ') || 'none'}`,
+                );
                 if (finalConfig.persona) {
                   console.log(`  Persona: ${finalConfig.persona.name}`);
                 }
                 console.log(`\n  Commands:`);
-                console.log(`    /track ${finalConfig.name} add "entry"    - Add entry`);
-                console.log(`    /track ${finalConfig.name} stats         - View stats`);
-                console.log(`    /track ${finalConfig.name} history       - View history`);
+                console.log(
+                  `    /track ${finalConfig.name} add "entry"    - Add entry`,
+                );
+                console.log(
+                  `    /track ${finalConfig.name} stats         - View stats`,
+                );
+                console.log(
+                  `    /track ${finalConfig.name} history       - View history`,
+                );
                 if (finalConfig.persona) {
-                  console.log(`    /track ${finalConfig.name} chat "?"     - Chat with ${finalConfig.persona.name}`);
+                  console.log(
+                    `    /track ${finalConfig.name} chat "?"     - Chat with ${finalConfig.persona.name}`,
+                  );
                 }
-                console.log(`    /track ${finalConfig.name} delete       - Delete tracker\n`);
+                console.log(
+                  `    /track ${finalConfig.name} delete       - Delete tracker\n`,
+                );
               } else {
                 console.log(`  \x1b[31m${result.message}\x1b[0m\n`);
               }
             } else {
-              console.log('  \x1b[31mFailed to parse tracker description.\x1b[0m\n');
+              console.log(
+                '  \x1b[31mFailed to parse tracker description.\x1b[0m\n',
+              );
             }
           } else if (trackerName && action === 'chat') {
             // Chat with tracker persona
@@ -2335,10 +2843,18 @@ async function chat() {
             if (!tracker) {
               console.log(`\n  Tracker not found: ${trackerName}\n`);
             } else if (!message) {
-              console.log('\n  Usage: /track <name> chat "How\'s my progress?"\n');
+              console.log(
+                '\n  Usage: /track <name> chat "How\'s my progress?"\n',
+              );
             } else {
-              console.log(`\n  ${tracker.config?.persona?.name || tracker.displayName}:\n`);
-              const result = await personaChat.chat(trackerName, message, `You are a helpful tracking assistant for ${tracker.displayName}.`);
+              console.log(
+                `\n  ${tracker.config?.persona?.name || tracker.displayName}:\n`,
+              );
+              const result = await personaChat.chat(
+                trackerName,
+                message,
+                `You are a helpful tracking assistant for ${tracker.displayName}.`,
+              );
               if (result.error) {
                 console.log(`  Error: ${result.error}\n`);
               } else {
@@ -2349,27 +2865,39 @@ async function chat() {
             // Add a record via text
             const text = subAction ? trackArgs.slice(2).join(' ') : '';
             if (!text) {
-              console.log('\n  Usage: /track <name> add "Bench press 3x8 at 185"\n');
+              console.log(
+                '\n  Usage: /track <name> add "Bench press 3x8 at 185"\n',
+              );
             } else {
               const tracker = trackStore.getTracker(trackerName);
               if (!tracker) {
                 console.log(`\n  Tracker not found: ${trackerName}\n`);
               } else {
-                console.log(`\n  Adding entry to ${tracker.displayName}: "${text}"\n`);
-                const parsed = await parseRecordFromText(trackerName, text, tracker.type);
+                console.log(
+                  `\n  Adding entry to ${tracker.displayName}: "${text}"\n`,
+                );
+                const parsed = await parseRecordFromText(
+                  trackerName,
+                  text,
+                  tracker.type,
+                );
                 if (parsed.success) {
                   const result = trackStore.addRecord(trackerName, {
                     data: parsed.data,
-                    source: 'text'
+                    source: 'text',
                   });
                   if (result.success) {
                     console.log('  \x1b[32mEntry added!\x1b[0m');
-                    console.log(`  Data: ${JSON.stringify(parsed.data, null, 2).replace(/\n/g, '\n  ')}\n`);
+                    console.log(
+                      `  Data: ${JSON.stringify(parsed.data, null, 2).replace(/\n/g, '\n  ')}\n`,
+                    );
                   } else {
                     console.log(`  \x1b[31mFailed: ${result.message}\x1b[0m\n`);
                   }
                 } else {
-                  console.log(`  \x1b[31mFailed to parse: ${parsed.error}\x1b[0m\n`);
+                  console.log(
+                    `  \x1b[31mFailed to parse: ${parsed.error}\x1b[0m\n`,
+                  );
                 }
               }
             }
@@ -2408,41 +2936,60 @@ async function chat() {
 Extract relevant data and respond with ONLY valid JSON with fields matching these metrics: ${tracker.config.metrics?.join(', ') || 'custom'}
 
 Respond with JSON containing a "data" object with the extracted values.`;
-                  const content = await visionAnalyzer.analyzeImage(resolvedPath, prompt);
+                  const content = await visionAnalyzer.analyzeImage(
+                    resolvedPath,
+                    prompt,
+                  );
                   try {
-                    analysis = JSON.parse(content.match(/\{[\s\S]*\}/)?.[0] || '{}');
+                    analysis = JSON.parse(
+                      content.match(/\{[\s\S]*\}/)?.[0] || '{}',
+                    );
                   } catch {
                     analysis = { error: 'Failed to parse image' };
                   }
                 }
 
                 if (analysis.error) {
-                  console.log(`  \x1b[31mAnalysis failed: ${analysis.error}\x1b[0m\n`);
+                  console.log(
+                    `  \x1b[31mAnalysis failed: ${analysis.error}\x1b[0m\n`,
+                  );
                 } else {
                   // Try to parse as JSON
                   let parsedData = analysis;
                   if (typeof analysis === 'string') {
                     try {
-                      parsedData = JSON.parse(analysis.match(/\{[\s\S]*\}/)?.[0] || '{}');
+                      parsedData = JSON.parse(
+                        analysis.match(/\{[\s\S]*\}/)?.[0] || '{}',
+                      );
                     } catch {
                       console.log(`  Analysis: ${analysis}\n`);
                     }
                   }
 
-                  if (parsedData.exercise || parsedData.meal || parsedData.data) {
+                  if (
+                    parsedData.exercise ||
+                    parsedData.meal ||
+                    parsedData.data
+                  ) {
                     const result = trackStore.addRecord(trackerName, {
                       data: parsedData.data || parsedData,
-                      source: 'image'
+                      source: 'image',
                     });
 
                     if (result.success) {
                       console.log('  \x1b[32mEntry added from image!\x1b[0m');
-                      console.log(`  Data: ${JSON.stringify(parsedData.data || parsedData, null, 2).replace(/\n/g, '\n  ')}\n`);
+                      console.log(
+                        `  Data: ${JSON.stringify(parsedData.data || parsedData, null, 2).replace(/\n/g, '\n  ')}\n`,
+                      );
                     } else {
-                      console.log(`  \x1b[31mFailed: ${result.message}\x1b[0m\n`);
+                      console.log(
+                        `  \x1b[31mFailed: ${result.message}\x1b[0m\n`,
+                      );
                     }
                   } else {
-                    console.log(`  Could not extract data: ${JSON.stringify(parsedData)}\n`);
+                    console.log(
+                      `  Could not extract data: ${JSON.stringify(parsedData)}\n`,
+                    );
                   }
                 }
               }
@@ -2476,14 +3023,27 @@ Respond with JSON containing a "data" object with the extracted values.`;
             if (!tracker) {
               console.log(`\n  Tracker not found: ${trackerName}\n`);
             } else if (!period1 || !period2) {
-              console.log('\n  Usage: /track <name> compare <period1> <period2>\n');
-              console.log('  Example: /track workout compare this-week last-week');
-              console.log('  Periods: today, yesterday, week, month, this-week, last-week, this-month, last-month\n');
+              console.log(
+                '\n  Usage: /track <name> compare <period1> <period2>\n',
+              );
+              console.log(
+                '  Example: /track workout compare this-week last-week',
+              );
+              console.log(
+                '  Periods: today, yesterday, week, month, this-week, last-week, this-month, last-month\n',
+              );
             } else {
-              const comparison = queryEngine.comparePeriods(trackerName, period1, period2);
+              const comparison = queryEngine.comparePeriods(
+                trackerName,
+                period1,
+                period2,
+              );
               console.log(queryEngine.formatComparison(comparison));
             }
-          } else if (trackerName && (action === 'delete' || action === 'remove')) {
+          } else if (
+            trackerName &&
+            (action === 'delete' || action === 'remove')
+          ) {
             // Delete tracker
             const tracker = trackStore.getTracker(trackerName);
             if (!tracker) {
@@ -2491,7 +3051,9 @@ Respond with JSON containing a "data" object with the extracted values.`;
             } else {
               const result = trackStore.deleteTracker(trackerName);
               if (result.success) {
-                console.log(`\n  \x1b[32mDeleted tracker: ${tracker.displayName}\x1b[0m\n`);
+                console.log(
+                  `\n  \x1b[32mDeleted tracker: ${tracker.displayName}\x1b[0m\n`,
+                );
               } else {
                 console.log(`\n  \x1b[31mFailed: ${result.message}\x1b[0m\n`);
               }
@@ -2513,7 +3075,9 @@ Respond with JSON containing a "data" object with the extracted values.`;
                 console.log(`\n  Tracker not found: ${trackerName}\n`);
               } else {
                 const records = trackStore.getRecords(trackerName);
-                const record = records.records?.find(r => r.id.includes(recordId) || r.id.slice(-6) === recordId);
+                const record = records.records?.find(
+                  (r) => r.id.includes(recordId) || r.id.slice(-6) === recordId,
+                );
 
                 if (!record) {
                   console.log(`\n  Record not found: ${recordId}\n`);
@@ -2525,19 +3089,28 @@ Respond with JSON containing a "data" object with the extracted values.`;
                     newData = {};
                     const pairs = newDataStr.match(/(\w+)=([^""]+|"[^""]*")/g);
                     if (pairs) {
-                      pairs.forEach(pair => {
+                      pairs.forEach((pair) => {
                         const [key, ...val] = pair.split('=');
-                        newData[key.trim()] = val.join('=').replace(/^["']|["']$/g, '').trim();
+                        newData[key.trim()] = val
+                          .join('=')
+                          .replace(/^["']|["']$/g, '')
+                          .trim();
                       });
                     } else {
                       newData = { notes: newDataStr };
                     }
                   }
 
-                  const result = trackStore.updateRecord(trackerName, record.id, newData);
+                  const result = trackStore.updateRecord(
+                    trackerName,
+                    record.id,
+                    newData,
+                  );
                   if (result.success) {
                     console.log(`\n  \x1b[32mUpdated @${trackerName}\x1b[0m`);
-                    console.log(`  New data: ${JSON.stringify(result.record.data, null, 2)}\n`);
+                    console.log(
+                      `  New data: ${JSON.stringify(result.record.data, null, 2)}\n`,
+                    );
                   } else {
                     console.log(`\n  Failed: ${result.message}\n`);
                   }
@@ -2556,43 +3129,91 @@ Respond with JSON containing a "data" object with the extracted values.`;
                 console.log(`\n  No entries yet.\n`);
               } else {
                 console.log(`\n  Recent entries:\n`);
-                records.forEach(r => {
-                  console.log(`  [${r.date}] ${r.id.slice(-8)}: ${JSON.stringify(r.data)}`);
+                records.forEach((r) => {
+                  console.log(
+                    `  [${r.date}] ${r.id.slice(-8)}: ${JSON.stringify(r.data)}`,
+                  );
                 });
-                console.log(`\n  To edit: /track ${trackerName} edit <id> "field=value"\n`);
+                console.log(
+                  `\n  To edit: /track ${trackerName} edit <id> "field=value"\n`,
+                );
               }
             }
           } else if (action === 'help') {
             console.log('\n  Tracker Commands:\n');
-            console.log('    /track list                           - List all trackers');
-            console.log('    /track create                         - Launch interactive wizard');
-            console.log('    /track create "query"                 - Create from natural language');
-            console.log('    /track <name> add "text entry"        - Add entry via natural language');
-            console.log('    /track <name> image <path>            - Add entry via image analysis');
-            console.log('    /track <name> chat "question"         - Chat with tracker persona');
-            console.log('    /track <name> stats [period]          - Show statistics');
-            console.log('    /track <name> history [limit]         - Show recent entries');
-            console.log('    /track <name> compare <p1> <p2>       - Compare two periods');
-            console.log('    /track <name> edit <id> <data>        - Edit a record');
-            console.log('    /track <name> delete                  - Delete tracker');
-            console.log('    /track <name> persona                 - Manage tracker persona\n');
+            console.log(
+              '    /track list                           - List all trackers',
+            );
+            console.log(
+              '    /track create                         - Launch interactive wizard',
+            );
+            console.log(
+              '    /track create "query"                 - Create from natural language',
+            );
+            console.log(
+              '    /track <name> add "text entry"        - Add entry via natural language',
+            );
+            console.log(
+              '    /track <name> image <path>            - Add entry via image analysis',
+            );
+            console.log(
+              '    /track <name> chat "question"         - Chat with tracker persona',
+            );
+            console.log(
+              '    /track <name> stats [period]          - Show statistics',
+            );
+            console.log(
+              '    /track <name> history [limit]         - Show recent entries',
+            );
+            console.log(
+              '    /track <name> compare <p1> <p2>       - Compare two periods',
+            );
+            console.log(
+              '    /track <name> edit <id> <data>        - Edit a record',
+            );
+            console.log(
+              '    /track <name> delete                  - Delete tracker',
+            );
+            console.log(
+              '    /track <name> persona                 - Manage tracker persona\n',
+            );
             console.log('  Examples:\n');
-            console.log('    /track create                         - Interactive wizard');
-            console.log('    /track create "workout tracker with exercise, weight, reps"');
+            console.log(
+              '    /track create                         - Interactive wizard',
+            );
+            console.log(
+              '    /track create "workout tracker with exercise, weight, reps"',
+            );
             console.log('    /track workout add "Deadlift 3x10 at 185 lbs"');
             console.log('    /track workout image ~/workout.png');
-            console.log('    /track workout chat "How\'s my progress this month?"');
+            console.log(
+              '    /track workout chat "How\'s my progress this month?"',
+            );
             console.log('    /track workout stats week');
             console.log('    /track workout compare this-week last-week');
             console.log('    /track workout history\n');
-            console.log('  Periods: today, yesterday, week, month, this-week, last-week, this-month, last-month\n');
+            console.log(
+              '  Periods: today, yesterday, week, month, this-week, last-week, this-month, last-month\n',
+            );
             console.log('  @tracker commands (natural language!):\n');
-            console.log('    @matt last                            - Show last entry');
-            console.log('    @matt history                         - Show recent entries');
-            console.log('    @matt the calories was 500            - Edit last entry');
-            console.log('    @matt max_hr was 175                  - Edit last entry');
-            console.log('    @matt fix: total_cals=450             - Edit last entry');
-            console.log('    @matt delete                          - Delete last entry\n');
+            console.log(
+              '    @matt last                            - Show last entry',
+            );
+            console.log(
+              '    @matt history                         - Show recent entries',
+            );
+            console.log(
+              '    @matt the calories was 500            - Edit last entry',
+            );
+            console.log(
+              '    @matt max_hr was 175                  - Edit last entry',
+            );
+            console.log(
+              '    @matt fix: total_cals=450             - Edit last entry',
+            );
+            console.log(
+              '    @matt delete                          - Delete last entry\n',
+            );
           } else {
             console.log('\n  Usage: /track <command> [args]\n');
             console.log('  Run /track help for full command list.\n');
@@ -2628,7 +3249,9 @@ Respond with JSON containing a "data" object with the extracted values.`;
           console.log(`\n  ${tracker.displayName} (@${tracker.name})`);
           console.log(`  Type: ${tracker.type}`);
           console.log(`  Entries: ${count}`);
-          console.log(`  Metrics: ${tracker.config.metrics?.join(', ') || 'none'}\n`);
+          console.log(
+            `  Metrics: ${tracker.config.metrics?.join(', ') || 'none'}\n`,
+          );
 
           if (tracker.config?.persona) {
             console.log(`  Persona: ${tracker.config.persona.name}`);
@@ -2653,28 +3276,48 @@ Respond with JSON containing a "data" object with the extracted values.`;
         // Check for common queries
         const lowerQuery = query.toLowerCase();
 
-        if (lowerQuery.startsWith('stats') || lowerQuery === '?' || lowerQuery.includes('progress')) {
+        if (
+          lowerQuery.startsWith('stats') ||
+          lowerQuery === '?' ||
+          lowerQuery.includes('progress')
+        ) {
           // Show stats
-          const period = lowerQuery.includes('week') ? 'week' :
-                        lowerQuery.includes('month') ? 'month' :
-                        lowerQuery.includes('today') ? 'today' : 'week';
+          const period = lowerQuery.includes('week')
+            ? 'week'
+            : lowerQuery.includes('month')
+              ? 'month'
+              : lowerQuery.includes('today')
+                ? 'today'
+                : 'week';
           const stats = queryEngine.getStats(trackerName, period);
           console.log(queryEngine.formatStats(stats));
         } else if (lowerQuery.startsWith('history') || lowerQuery === 'log') {
           // Show history
           const limit = parseInt(lowerQuery.match(/\d+/)?.[0]) || 10;
-          const records = trackStore.getRecordsByDateRange(trackerName, null, null);
+          const records = trackStore.getRecordsByDateRange(
+            trackerName,
+            null,
+            null,
+          );
           const recent = records.slice(-limit);
           console.log(queryEngine.formatHistory(recent));
-        } else if (lowerQuery.startsWith('add ') || lowerQuery.startsWith('log ') || lowerQuery.startsWith('record ')) {
+        } else if (
+          lowerQuery.startsWith('add ') ||
+          lowerQuery.startsWith('log ') ||
+          lowerQuery.startsWith('record ')
+        ) {
           // Add entry
           const text = query.replace(/^(add|log|record)\s+/i, '');
           console.log(`  Adding entry: "${text}"\n`);
-          const parsed = await parseRecordFromText(trackerName, text, tracker.type);
+          const parsed = await parseRecordFromText(
+            trackerName,
+            text,
+            tracker.type,
+          );
           if (parsed.success) {
             const result = trackStore.addRecord(trackerName, {
               data: parsed.data,
-              source: 'text'
+              source: 'text',
             });
             if (result.success) {
               console.log('  Entry added!\n');
@@ -2684,16 +3327,27 @@ Respond with JSON containing a "data" object with the extracted values.`;
           } else {
             console.log(`  Failed to parse: ${parsed.error}\n`);
           }
-        } else if (lowerQuery.startsWith('chat ') || lowerQuery.startsWith('ask ')) {
+        } else if (
+          lowerQuery.startsWith('chat ') ||
+          lowerQuery.startsWith('ask ')
+        ) {
           // Chat with persona
           const message = query.replace(/^(chat|ask)\s+/i, '');
-          const result = await personaChat.chat(trackerName, message, `You are a helpful assistant for ${tracker.displayName}.`);
+          const result = await personaChat.chat(
+            trackerName,
+            message,
+            `You are a helpful assistant for ${tracker.displayName}.`,
+          );
           if (result.error) {
             console.log(`  Error: ${result.error}\n`);
           } else {
             console.log(`  ${result.response}\n`);
           }
-        } else if (lowerQuery.startsWith('last') || lowerQuery.includes('last ') || lowerQuery.includes(' most recent')) {
+        } else if (
+          lowerQuery.startsWith('last') ||
+          lowerQuery.includes('last ') ||
+          lowerQuery.includes(' most recent')
+        ) {
           // Show the most recent entry
           const records = trackStore.getRecords(trackerName);
           const recentRecords = records.records || records;
@@ -2701,24 +3355,35 @@ Respond with JSON containing a "data" object with the extracted values.`;
             const last = recentRecords[recentRecords.length - 1];
             console.log(`\n  Last entry (${last.date}):`);
             console.log(`  ${JSON.stringify(last.data, null, 2)}\n`);
-            console.log(`  To fix: @${trackerName} the calories was actually 500\n`);
+            console.log(
+              `  To fix: @${trackerName} the calories was actually 500\n`,
+            );
           } else {
             console.log(`  No entries yet.\n`);
           }
-        } else if (lowerQuery.includes('what was') || lowerQuery.includes('show me') || lowerQuery.includes('tell me')) {
+        } else if (
+          lowerQuery.includes('what was') ||
+          lowerQuery.includes('show me') ||
+          lowerQuery.includes('tell me')
+        ) {
           // Show history or last entry
           const records = trackStore.getRecords(trackerName);
           const recentRecords = (records.records || records).slice(-5);
           if (recentRecords.length > 0) {
             console.log(`\n  Recent entries:\n`);
-            recentRecords.forEach(r => {
+            recentRecords.forEach((r) => {
               console.log(`  [${r.date}] ${JSON.stringify(r.data)}`);
             });
             console.log(`\n  To edit: @${trackerName} the max_hr was 175\n`);
           } else {
             console.log(`  No entries yet.\n`);
           }
-        } else if (lowerQuery.startsWith('edit ') || lowerQuery.startsWith('update ') || lowerQuery.startsWith('fix ') || lowerQuery.startsWith('change ')) {
+        } else if (
+          lowerQuery.startsWith('edit ') ||
+          lowerQuery.startsWith('update ') ||
+          lowerQuery.startsWith('fix ') ||
+          lowerQuery.startsWith('change ')
+        ) {
           // Edit/update a record - supports both ID and natural language
           // Natural language examples:
           // @matt edit abc123 "total_cals=500"
@@ -2732,12 +3397,13 @@ Respond with JSON containing a "data" object with the extracted values.`;
 
           // Check if query mentions "last" or "my"
           const isLastEntry = /last|my (entry|workout)/i.test(query);
-          const record = isLastEntry && recentRecords.length > 0
-            ? recentRecords[recentRecords.length - 1]
-            : recentRecords.find(r => {
-                const shortId = r.id.slice(-6);
-                return query.includes(shortId) || query.includes(r.id);
-              });
+          const record =
+            isLastEntry && recentRecords.length > 0
+              ? recentRecords[recentRecords.length - 1]
+              : recentRecords.find((r) => {
+                  const shortId = r.id.slice(-6);
+                  return query.includes(shortId) || query.includes(r.id);
+                });
 
           if (!record) {
             console.log(`\n  Couldn't find which entry to edit. Try:\n`);
@@ -2758,7 +3424,7 @@ Respond with JSON containing a "data" object with the extracted values.`;
               /(\w+):\s*([^\s,."']+)/gi,
             ];
 
-            valuePatterns.forEach(pattern => {
+            valuePatterns.forEach((pattern) => {
               let match;
               while ((match = pattern.exec(query)) !== null) {
                 const field = match[1].toLowerCase();
@@ -2773,39 +3439,63 @@ Respond with JSON containing a "data" object with the extracted values.`;
 
             // If no fields parsed, use the whole query as notes
             if (Object.keys(newData).length === 0) {
-              newData = { notes: query.replace(/^(edit|update|fix|change)\s+/i, '').trim() };
+              newData = {
+                notes: query
+                  .replace(/^(edit|update|fix|change)\s+/i, '')
+                  .trim(),
+              };
             }
 
-            const result = trackStore.updateRecord(trackerName, record.id, newData);
+            const result = trackStore.updateRecord(
+              trackerName,
+              record.id,
+              newData,
+            );
             if (result.success) {
-              console.log(`\n  \x1b[32mUpdated @${trackerName} (${record.date})\x1b[0m`);
-              console.log(`  Changed: ${Object.keys(newData).map(k => `${k}=${newData[k]}`).join(', ')}\n`);
+              console.log(
+                `\n  \x1b[32mUpdated @${trackerName} (${record.date})\x1b[0m`,
+              );
+              console.log(
+                `  Changed: ${Object.keys(newData)
+                  .map((k) => `${k}=${newData[k]}`)
+                  .join(', ')}\n`,
+              );
             } else {
               console.log(`\n  Failed: ${result.message}\n`);
             }
           }
-        } else if (lowerQuery.startsWith('delete ') || lowerQuery.startsWith('remove ')) {
+        } else if (
+          lowerQuery.startsWith('delete ') ||
+          lowerQuery.startsWith('remove ')
+        ) {
           // Delete a record - supports "last" naturally
           const fullRecords = trackStore.getRecords(trackerName);
           const recentRecords = fullRecords.records || [];
 
           // Check for "last" or just bare delete
           const isLastEntry = /last|this|my/i.test(query) || !query.match(/\d/);
-          const record = isLastEntry && recentRecords.length > 0
-            ? recentRecords[recentRecords.length - 1]
-            : recentRecords.find(r => {
-                const shortId = r.id.slice(-6);
-                return query.includes(shortId) || query.includes(r.id);
-              });
+          const record =
+            isLastEntry && recentRecords.length > 0
+              ? recentRecords[recentRecords.length - 1]
+              : recentRecords.find((r) => {
+                  const shortId = r.id.slice(-6);
+                  return query.includes(shortId) || query.includes(r.id);
+                });
 
           if (!record) {
             console.log(`\n  Record not found.\n`);
           } else {
-            const recordsFile = path.join(TRACKERS_DIR, trackerName, 'records.json');
+            const recordsFile = path.join(
+              TRACKERS_DIR,
+              trackerName,
+              'records.json',
+            );
             const data = trackStore.getRecords(trackerName);
-            data.records = data.records.filter(r => r.id !== record.id);
+            data.records = data.records.filter((r) => r.id !== record.id);
             fs.writeFileSync(recordsFile, JSON.stringify(data, null, 2));
-            console.log(`\n  \x1b[32mDeleted entry from ${record.date}\x1b[0m\n`);
+            console.log(
+              `\n  \x1b[32mDeleted entry from ${record.date}\x1b[0m\n`,
+            );
           }
         } else {
           // Check for custom auto-detect triggers first (user-defined in tracker config)
@@ -2820,47 +3510,62 @@ Respond with JSON containing a "data" object with the extracted values.`;
             /(morning|afternoon|evening) workout/i,
           ];
 
-          const looksLikeWorkoutLog = workoutTriggers.some(p => p.test(query)) &&
-            !lowerQuery.includes('how') && !lowerQuery.includes('what') && !lowerQuery.includes('?');
+          const looksLikeWorkoutLog =
+            workoutTriggers.some((p) => p.test(query)) &&
+            !lowerQuery.includes('how') &&
+            !lowerQuery.includes('what') &&
+            !lowerQuery.includes('?');
 
           // Determine if this should be auto-logged
-          const shouldAutoLog = hasCustomAutoDetect || (tracker.type === 'workout' && looksLikeWorkoutLog);
+          const shouldAutoLog =
+            hasCustomAutoDetect ||
+            (tracker.type === 'workout' && looksLikeWorkoutLog);
 
           if (shouldAutoLog) {
             // Determine parser type: custom triggers use tracker's type, workouts use 'workout'
             const parserType = hasCustomAutoDetect ? tracker.type : 'workout';
 
             // Auto-log the entry
-            const parsed = await parseRecordFromText(trackerName, query, parserType);
+            const parsed = await parseRecordFromText(
+              trackerName,
+              query,
+              parserType,
+            );
             let recordData = parsed.data;
 
             // Fallback for workouts if parsing failed
-            if ((!recordData || Object.keys(recordData).length === 0) && parserType === 'workout') {
+            if (
+              (!recordData || Object.keys(recordData).length === 0) &&
+              parserType === 'workout'
+            ) {
               recordData = {
                 exercise: 'Workout',
                 notes: query,
                 duration: null,
                 sets: null,
                 reps: null,
-                weight: null
+                weight: null,
               };
             }
 
             // Fallback for nutrition if parsing failed - create basic meal entry
-            if ((!recordData || Object.keys(recordData).length === 0) && parserType === 'nutrition') {
+            if (
+              (!recordData || Object.keys(recordData).length === 0) &&
+              parserType === 'nutrition'
+            ) {
               recordData = {
                 meal: 'Meal',
                 foods: query,
                 calories: null,
                 protein: null,
                 carbs: null,
-                fat: null
+                fat: null,
               };
             }
 
             const result = trackStore.addRecord(trackerName, {
               data: recordData,
-              source: 'auto-detect'
+              source: 'auto-detect',
             });
 
             if (result.success) {
@@ -2872,7 +3577,11 @@ Respond with JSON containing a "data" object with the extracted values.`;
 
             // Still provide a response
             if (tracker.config?.persona) {
-              const chatResult = await personaChat.chat(trackerName, query, `You are a helpful assistant for ${tracker.displayName}. Answer concisely.`);
+              const chatResult = await personaChat.chat(
+                trackerName,
+                query,
+                `You are a helpful assistant for ${tracker.displayName}. Answer concisely.`,
+              );
               if (!chatResult.error) {
                 console.log(`  ${chatResult.response}\n`);
               }
@@ -2880,7 +3589,11 @@ Respond with JSON containing a "data" object with the extracted values.`;
               console.log(`  Logged: ${query}\n`);
             }
           } else if (tracker.config?.persona) {
-            const result = await personaChat.chat(trackerName, query, `You are a helpful assistant for ${tracker.displayName}. Answer concisely.`);
+            const result = await personaChat.chat(
+              trackerName,
+              query,
+              `You are a helpful assistant for ${tracker.displayName}. Answer concisely.`,
+            );
             if (result.error) {
               console.log(`  Error: ${result.error}\n`);
             } else {
@@ -2908,7 +3621,10 @@ Respond with JSON containing a "data" object with the extracted values.`;
         const domainMatch = q.match(/([a-z]+\.[a-z]+(?:\.[a-z]+)?)/i);
         const domain = domainMatch ? domainMatch[1] : null;
 
-        const needsSearch = /\b(latest|recent|newest|what'?s new|recently released|news|current version|articles?|posts?|blog)\b/i.test(q) || domain;
+        const needsSearch =
+          /\b(latest|recent|newest|what'?s new|recently released|news|current version|articles?|posts?|blog)\b/i.test(
+            q,
+          ) || domain;
 
         let searchResults = [];
         let fetchedContent = null;
@@ -2938,7 +3654,11 @@ Respond with JSON containing a "data" object with the extracted values.`;
           console.log(`\n  \x1b[33m[Delegating to ${model}]\x1b[0m\n`);
 
           const startTime = Date.now();
-          const result = await runOllamaSubagent(effectiveQuery, model, systemPrompt);
+          const result = await runOllamaSubagent(
+            effectiveQuery,
+            model,
+            systemPrompt,
+          );
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
           console.log('\x1b[32mCharlize:\x1b[0m ');
@@ -2951,7 +3671,9 @@ Respond with JSON containing a "data" object with the extracted values.`;
           // Apply skill context if matched
           let effectiveSystemPrompt = systemPrompt;
           if (skillMatch) {
-            console.log(`  \x1b[36m[Using skill: ${skillMatch.skill.name}]\x1b[0m\n`);
+            console.log(
+              `  \x1b[36m[Using skill: ${skillMatch.skill.name}]\x1b[0m\n`,
+            );
             effectiveSystemPrompt = `${systemPrompt}\n\n---\n\n[ACTIVE SKILL: ${skillMatch.skill.name}]\n${skillMatch.skill.system_prompt}`;
           }
 
@@ -2960,9 +3682,9 @@ Respond with JSON containing a "data" object with the extracted values.`;
             const trackStore = new TrackerStore();
             const trackers = trackStore.listTrackers();
             if (trackers.length > 0) {
-              const trackerList = trackers.map(t =>
-                `- @${t.name}: ${t.displayName} (${t.type})`
-              ).join('\n');
+              const trackerList = trackers
+                .map((t) => `- @${t.name}: ${t.displayName} (${t.type})`)
+                .join('\n');
               effectiveSystemPrompt += `\n\n<USER TRACKERS>\nThe user has the following trackers available:\n${trackerList}\n\nWhen user mentions workouts, fitness, nutrition, sleep, or habits, you can reference their trackers. They can use @trackerName to interact with specific trackers (e.g., "@matt how am I doing?" or "@matt I did a workout today").\n</USER TRACKERS>`;
             }
           } catch (e) {
@@ -2971,14 +3693,20 @@ Respond with JSON containing a "data" object with the extracted values.`;
 
           // Add search results to context if we searched
           if (searchResults.length > 0) {
-            const searchContext = searchResults.map((r, i) =>
-              `[Source ${i + 1}] Title: ${r.title}\nURL: ${r.url}\n${r.snippet || ''}`
-            ).join('\n---\n');
+            const searchContext = searchResults
+              .map(
+                (r, i) =>
+                  `[Source ${i + 1}] Title: ${r.title}\nURL: ${r.url}\n${r.snippet || ''}`,
+              )
+              .join('\n---\n');
             effectiveSystemPrompt += `\n\n<IMPORTANT: WEB SEARCH RESULTS>\n${searchContext}\n\nYou MUST use these search results to answer the user's question. If the search results don't contain relevant information, say so explicitly. DO NOT fabricate articles, titles, or information that isn't in these results.\n</IMPORTANT: WEB SEARCH RESULTS>`;
           }
 
           const startTime = Date.now();
-          const { response } = await askWithMemory(effectiveQuery, effectiveSystemPrompt);
+          const { response } = await askWithMemory(
+            effectiveQuery,
+            effectiveSystemPrompt,
+          );
           const answer = response.message?.content || 'No response';
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -2988,7 +3716,7 @@ Respond with JSON containing a "data" object with the extracted values.`;
           // Show search sources if we searched
           if (searchResults.length > 0) {
             console.log('  \x1b[90mSources:\x1b[0m');
-            searchResults.forEach(r => console.log(`    • ${r.url}`));
+            searchResults.forEach((r) => console.log(`    • ${r.url}`));
             console.log();
           }
 
@@ -3010,8 +3738,9 @@ Respond with JSON containing a "data" object with the extracted values.`;
             /i'?m (currently|working on|building)/i,
           ];
 
-          const shouldStoreMemory = memoryTriggers.some(p => p.test(q)) ||
-            q.length > 20 && /^(can you|please|remember|note|keep)/i.test(q);
+          const shouldStoreMemory =
+            memoryTriggers.some((p) => p.test(q)) ||
+            (q.length > 20 && /^(can you|please|remember|note|keep)/i.test(q));
 
           if (shouldStoreMemory) {
             await memory.add(q, 'preference');
@@ -3028,20 +3757,28 @@ Respond with JSON containing a "data" object with the extracted values.`;
             /(morning|afternoon|evening) workout/i,
           ];
 
-          if (workoutTriggers.some(p => p.test(q))) {
+          if (workoutTriggers.some((p) => p.test(q))) {
             try {
               const trackStore = new TrackerStore();
               const trackers = trackStore.listTrackers();
-              const workoutTracker = trackers.find(t => t.type === 'workout');
+              const workoutTracker = trackers.find((t) => t.type === 'workout');
 
               if (workoutTracker) {
                 // Parse the workout text
-                const parsed = await parseRecordFromText(workoutTracker.name, q, 'workout');
+                const parsed = await parseRecordFromText(
+                  workoutTracker.name,
+                  q,
+                  'workout',
+                );
 
-                if (parsed.success && parsed.data && Object.keys(parsed.data).length > 0) {
+                if (
+                  parsed.success &&
+                  parsed.data &&
+                  Object.keys(parsed.data).length > 0
+                ) {
                   const result = trackStore.addRecord(workoutTracker.name, {
                     data: parsed.data,
-                    source: 'auto-detect'
+                    source: 'auto-detect',
                   });
 
                   if (result.success) {
@@ -3050,17 +3787,20 @@ Respond with JSON containing a "data" object with the extracted values.`;
                   }
                 } else {
                   // Even if parsing fails, log a basic workout entry
-                  const basicResult = trackStore.addRecord(workoutTracker.name, {
-                    data: {
-                      exercise: 'Workout',
-                      notes: q,
-                      duration: null,
-                      sets: null,
-                      reps: null,
-                      weight: null
+                  const basicResult = trackStore.addRecord(
+                    workoutTracker.name,
+                    {
+                      data: {
+                        exercise: 'Workout',
+                        notes: q,
+                        duration: null,
+                        sets: null,
+                        reps: null,
+                        weight: null,
+                      },
+                      source: 'auto-detect',
                     },
-                    source: 'auto-detect'
-                  });
+                  );
 
                   if (basicResult.success) {
                     console.log(`  \x1b[36m[Workout logged]\x1b[0m\n`);
@@ -3099,24 +3839,29 @@ async function downloadTelegramFile(bot, fileId) {
   try {
     const file = await bot.getFile(fileId);
     const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${file.file_path}`;
-    const tempPath = path.join(os.tmpdir(), `telegram_img_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`);
+    const tempPath = path.join(
+      os.tmpdir(),
+      `telegram_img_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
+    );
 
     return new Promise((resolve, reject) => {
       const fileStream = fs.createWriteStream(tempPath);
-      https.get(downloadUrl, (res) => {
-        if (res.statusCode !== 200) {
+      https
+        .get(downloadUrl, (res) => {
+          if (res.statusCode !== 200) {
+            fs.unlink(tempPath, () => {});
+            return resolve(null);
+          }
+          res.pipe(fileStream);
+          fileStream.on('finish', () => {
+            fileStream.close();
+            resolve(tempPath);
+          });
+        })
+        .on('error', (err) => {
           fs.unlink(tempPath, () => {});
-          return resolve(null);
-        }
-        res.pipe(fileStream);
-        fileStream.on('finish', () => {
-          fileStream.close();
-          resolve(tempPath);
+          resolve(null);
         });
-      }).on('error', (err) => {
-        fs.unlink(tempPath, () => {});
-        resolve(null);
-      });
     });
   } catch (e) {
     console.error(`Download error: ${e.message}`);
@@ -3126,13 +3871,19 @@ async function downloadTelegramFile(bot, fileId) {
 
 async function startTelegramBot() {
   if (!TELEGRAM_TOKEN) {
-    if (VERBOSE) console.log('\x1b[90m  [Telegram: TELEGRAM_TOKEN not set, skipping]\x1b[0m\n');
+    if (VERBOSE)
+      console.log(
+        '\x1b[90m  [Telegram: TELEGRAM_TOKEN not set, skipping]\x1b[0m\n',
+      );
     return null;
   }
 
   // Show masked token for debugging
-  const maskedToken = TELEGRAM_TOKEN.slice(0, 8) + '...' + TELEGRAM_TOKEN.slice(-5);
-  console.log(`\x1b[33m  [Telegram: connecting with token ${maskedToken}...]\x1b[0m\n`);
+  const maskedToken =
+    TELEGRAM_TOKEN.slice(0, 8) + '...' + TELEGRAM_TOKEN.slice(-5);
+  console.log(
+    `\x1b[33m  [Telegram: connecting with token ${maskedToken}...]\x1b[0m\n`,
+  );
 
   try {
     const TelegramBot = (await import('node-telegram-bot-api')).default;
@@ -3155,18 +3906,22 @@ async function startTelegramBot() {
         { command: 'profile', description: 'View your profile' },
         { command: 'memories', description: 'View stored memories' },
         { command: 'claude', description: 'Run Claude Code CLI' },
-        { command: 'git', description: 'Git workflow' }
+        { command: 'git', description: 'Git workflow' },
       ]);
       console.log(`\x1b[90m  [Telegram: commands registered]\x1b[0m\n`);
     } catch (e) {
-      console.log(`\x1b[90m  [Telegram: failed to register commands: ${e.message}]\x1b[0m\n`);
+      console.log(
+        `\x1b[90m  [Telegram: failed to register commands: ${e.message}]\x1b[0m\n`,
+      );
     }
 
     telegramBot.on('message', async (msg) => {
       const chatId = msg.chat.id;
 
       // Verbose logging of ALL messages
-      console.log(`\x1b[35m[Telegram IN] chat=${chatId} user=${msg.chat.first_name || 'unknown'}: ${msg.text || '(non-text)'}\x1b[0m`);
+      console.log(
+        `\x1b[35m[Telegram IN] chat=${chatId} user=${msg.chat.first_name || 'unknown'}: ${msg.text || '(non-text)'}\x1b[0m`,
+      );
 
       // Handle photo messages (image analysis with vision)
       if (msg.photo) {
@@ -3181,12 +3936,14 @@ async function startTelegramBot() {
 
           // Parse @tracker mention from caption
           const trackerMentionMatch = caption.match(/@(\w+)/);
-          const trackerName = trackerMentionMatch ? trackerMentionMatch[1] : null;
+          const trackerName = trackerMentionMatch
+            ? trackerMentionMatch[1]
+            : null;
           const cleanCaption = caption.replace(/@\w+/, '').trim();
 
           // Send immediate acknowledgment
           await telegramBot.sendMessage(chatId, 'Analyzing image...', {
-            reply_to_message_id: replyToMsgId
+            reply_to_message_id: replyToMsgId,
           });
 
           // Process image in background (fire and forget)
@@ -3194,7 +3951,10 @@ async function startTelegramBot() {
             try {
               const imagePath = await downloadTelegramFile(telegramBot, fileId);
               if (!imagePath) {
-                await telegramBot.sendMessage(chatId, 'Failed to download the image.');
+                await telegramBot.sendMessage(
+                  chatId,
+                  'Failed to download the image.',
+                );
                 return;
               }
 
@@ -3207,11 +3967,16 @@ async function startTelegramBot() {
               if (trackerName) {
                 targetTracker = trackStore.getTracker(trackerName);
                 if (targetTracker) {
-                  console.log(`\x1b[36m  -> Using tracker: ${targetTracker.displayName} (${targetTracker.type})\x1b[0m\n`);
+                  console.log(
+                    `\x1b[36m  -> Using tracker: ${targetTracker.displayName} (${targetTracker.type})\x1b[0m\n`,
+                  );
 
                   if (targetTracker.type === 'workout') {
                     analysis = await visionAnalyzer.analyzeWorkout(imagePath);
-                  } else if (targetTracker.type === 'food' || targetTracker.type === 'nutrition') {
+                  } else if (
+                    targetTracker.type === 'food' ||
+                    targetTracker.type === 'nutrition'
+                  ) {
                     analysis = await visionAnalyzer.analyzeFood(imagePath);
                   } else {
                     // Generic analysis with tracker metrics
@@ -3219,27 +3984,47 @@ async function startTelegramBot() {
 Metrics to extract: ${targetTracker.config.metrics?.join(', ') || 'custom'}
 
 Respond with ONLY valid JSON with a "data" object containing extracted values.`;
-                    analysis = await visionAnalyzer.analyzeImage(imagePath, prompt);
+                    analysis = await visionAnalyzer.analyzeImage(
+                      imagePath,
+                      prompt,
+                    );
                   }
                 } else {
-                  console.log(`\x1b[33m  -> Tracker @${trackerName} not found, using generic analysis\x1b[0m\n`);
-                  analysis = await visionAnalyzer.analyzeImage(imagePath, cleanCaption || 'Describe this image in detail.');
+                  console.log(
+                    `\x1b[33m  -> Tracker @${trackerName} not found, using generic analysis\x1b[0m\n`,
+                  );
+                  analysis = await visionAnalyzer.analyzeImage(
+                    imagePath,
+                    cleanCaption || 'Describe this image in detail.',
+                  );
                 }
               } else {
                 // Generic analysis
-                analysis = await visionAnalyzer.analyzeImage(imagePath, cleanCaption || 'Describe what you see in this image in detail.');
+                analysis = await visionAnalyzer.analyzeImage(
+                  imagePath,
+                  cleanCaption ||
+                    'Describe what you see in this image in detail.',
+                );
               }
 
               // Clean up temp file
-              try { fs.unlinkSync(imagePath); } catch (e) {}
+              try {
+                fs.unlinkSync(imagePath);
+              } catch (e) {}
 
               // Verbose logging of raw vision result
               if (VERBOSE) {
                 console.log(`\x1b[90m  -> Raw vision response:\x1b[0m`);
-                console.log(`\x1b[90m${JSON.stringify(analysis, null, 2)}\x1b[0m\n`);
+                console.log(
+                  `\x1b[90m${JSON.stringify(analysis, null, 2)}\x1b[0m\n`,
+                );
               } else {
-                console.log(`\x1b[90m  -> Vision analysis type: ${typeof analysis}\x1b[0m`);
-                console.log(`\x1b[90m  -> Vision response preview: ${JSON.stringify(analysis)?.slice(0, 300)}\x1b[0m\n`);
+                console.log(
+                  `\x1b[90m  -> Vision analysis type: ${typeof analysis}\x1b[0m`,
+                );
+                console.log(
+                  `\x1b[90m  -> Vision response preview: ${JSON.stringify(analysis)?.slice(0, 300)}\x1b[0m\n`,
+                );
               }
 
               // Handle different response types
@@ -3250,18 +4035,26 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
                 analysisText = analysis.trim();
               } else if (typeof analysis === 'object' && analysis !== null) {
                 // Check if it's a JSON response with data
-                const jsonMatch = typeof analysis === 'string'
-                  ? analysis.match(/\{[\s\S]*\}/)
-                  : null;
+                const jsonMatch =
+                  typeof analysis === 'string'
+                    ? analysis.match(/\{[\s\S]*\}/)
+                    : null;
                 if (jsonMatch) {
                   try {
                     extractedData = JSON.parse(jsonMatch[0]);
                     analysisText = JSON.stringify(extractedData, null, 2);
                   } catch (e) {
-                    analysisText = analysis.message || analysis.content || JSON.stringify(analysis);
+                    analysisText =
+                      analysis.message ||
+                      analysis.content ||
+                      JSON.stringify(analysis);
                   }
                 } else {
-                  analysisText = analysis.message || analysis.content || analysis.error || JSON.stringify(analysis);
+                  analysisText =
+                    analysis.message ||
+                    analysis.content ||
+                    analysis.error ||
+                    JSON.stringify(analysis);
                 }
               } else if (analysis && analysis.error) {
                 analysisText = `Vision error: ${analysis.error}`;
@@ -3269,18 +4062,26 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
 
               // If tracker specified, try to save the extracted data
               if (targetTracker && extractedData) {
-                console.log(`\x1b[36m  -> Attempting to save to @${targetTracker.name}\x1b[0m\n`);
+                console.log(
+                  `\x1b[36m  -> Attempting to save to @${targetTracker.name}\x1b[0m\n`,
+                );
 
                 // Flatten nested data and extract all key-value pairs
                 const flattenData = (obj, prefix = '') => {
                   const result = {};
                   for (const [key, value] of Object.entries(obj)) {
                     const newKey = prefix ? `${prefix}_${key}` : key;
-                    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                    if (
+                      value !== null &&
+                      typeof value === 'object' &&
+                      !Array.isArray(value)
+                    ) {
                       Object.assign(result, flattenData(value, newKey));
                     } else if (value !== null && value !== undefined) {
                       // Convert arrays to comma-separated strings
-                      result[newKey] = Array.isArray(value) ? value.join(', ') : value;
+                      result[newKey] = Array.isArray(value)
+                        ? value.join(', ')
+                        : value;
                     }
                   }
                   return result;
@@ -3290,44 +4091,67 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
                 const recordData = {
                   ...flattenData(extractedData),
                   _rawText: cleanCaption || 'From image',
-                  _imageProcessed: new Date().toISOString()
+                  _imageProcessed: new Date().toISOString(),
                 };
 
                 const result = trackStore.addRecord(targetTracker.name, {
                   data: recordData,
-                  source: 'image'
+                  source: 'image',
                 });
 
                 if (result.success) {
-                  console.log(`\x1b[32m  -> Saved to @${targetTracker.name}!\x1b[0m\n`);
-                  console.log(`\x1b[90m  -> Extracted fields: ${Object.keys(recordData).filter(k => !k.startsWith('_')).join(', ')}\x1b[0m\n`);
+                  console.log(
+                    `\x1b[32m  -> Saved to @${targetTracker.name}!\x1b[0m\n`,
+                  );
+                  console.log(
+                    `\x1b[90m  -> Extracted fields: ${Object.keys(recordData)
+                      .filter((k) => !k.startsWith('_'))
+                      .join(', ')}\x1b[0m\n`,
+                  );
                   analysisText = `*Saved to @${targetTracker.name}*\n\n${JSON.stringify(recordData, null, 2)}`;
                 } else {
-                  console.log(`\x1b[31m  -> Failed to save: ${result.message}\x1b[0m\n`);
+                  console.log(
+                    `\x1b[31m  -> Failed to save: ${result.message}\x1b[0m\n`,
+                  );
                 }
               }
 
               if (analysisText) {
                 await telegramBot.sendMessage(chatId, analysisText, {
-                  parse_mode: analysisText.includes('{') ? 'Markdown' : undefined
+                  parse_mode: analysisText.includes('{')
+                    ? 'Markdown'
+                    : undefined,
                 });
                 console.log(`\x1b[32m  -> Image analysis sent\x1b[0m\n`);
               } else {
-                console.error(`\x1b[31m  -> Background image error: Empty or invalid analysis result\x1b[0m\n`);
+                console.error(
+                  `\x1b[31m  -> Background image error: Empty or invalid analysis result\x1b[0m\n`,
+                );
                 try {
-                  await telegramBot.sendMessage(chatId, 'Sorry, I had trouble analyzing that image. The vision model may not be available.');
+                  await telegramBot.sendMessage(
+                    chatId,
+                    'Sorry, I had trouble analyzing that image. The vision model may not be available.',
+                  );
                 } catch (e) {}
               }
             } catch (error) {
-              console.error(`\x1b[31m  -> Background image error: ${error.message}\x1b[0m\n`);
+              console.error(
+                `\x1b[31m  -> Background image error: ${error.message}\x1b[0m\n`,
+              );
               try {
-                await telegramBot.sendMessage(chatId, 'Sorry, I had trouble analyzing that image.');
+                await telegramBot.sendMessage(
+                  chatId,
+                  'Sorry, I had trouble analyzing that image.',
+                );
               } catch (e) {}
             }
           })();
         } catch (error) {
           console.error(`\x1b[31m  -> Image error: ${error.message}\x1b[0m\n`);
-          await telegramBot.sendMessage(chatId, 'Sorry, I had trouble processing that image.');
+          await telegramBot.sendMessage(
+            chatId,
+            'Sorry, I had trouble processing that image.',
+          );
         }
         return;
       }
@@ -3339,12 +4163,18 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
         const arg = parts.slice(1).join(' ');
 
         if (command === '/start') {
-          await telegramBot.sendMessage(chatId, "Hi! I'm Charlize. Send me a message and I'll help you out. Use /help for commands.", {
-            reply_to_message_id: msg.message_id
-          });
+          await telegramBot.sendMessage(
+            chatId,
+            "Hi! I'm Charlize. Send me a message and I'll help you out. Use /help for commands.",
+            {
+              reply_to_message_id: msg.message_id,
+            },
+          );
           console.log(`\x1b[32m  -> /start sent\x1b[0m\n`);
         } else if (command === '/help') {
-          await telegramBot.sendMessage(chatId, `*Charlize AI Assistant Commands*
+          await telegramBot.sendMessage(
+            chatId,
+            `*Charlize AI Assistant Commands*
 
 • /track - Manage trackers (workouts, food, habits)
 • /search <query> - Web search
@@ -3359,11 +4189,13 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
 *Quick Actions:*
 • @trackerName - Query a tracker
 • Just chat naturally!`,
-            { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' }
+            { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' },
           );
           console.log(`\x1b[32m  -> /help sent\x1b[0m\n`);
         } else if (command === '/track') {
-          await telegramBot.sendMessage(chatId, `*Tracker Commands*
+          await telegramBot.sendMessage(
+            chatId,
+            `*Tracker Commands*
 
 • /track list - List all trackers
 • /track create - Create a new tracker
@@ -3376,70 +4208,115 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
 • /track list
 • /track workout add "Bench press 3x8 at 185"
 • @matt what was my last workout?`,
-            { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' }
+            { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' },
           );
           console.log(`\x1b[32m  -> /track help sent\x1b[0m\n`);
         } else if (command === '/search') {
           if (!arg) {
-            await telegramBot.sendMessage(chatId, "Usage: /search <query>\n\nExample: /search latest React features", {
-              reply_to_message_id: msg.message_id
-            });
+            await telegramBot.sendMessage(
+              chatId,
+              'Usage: /search <query>\n\nExample: /search latest React features',
+              {
+                reply_to_message_id: msg.message_id,
+              },
+            );
           } else {
             console.log(`\x1b[36m  -> Searching: ${arg}\x1b[0m\n`);
             const results = await webSearch(arg, 5);
             if (results.length === 0) {
-              await telegramBot.sendMessage(chatId, "No results found.", { reply_to_message_id: msg.message_id });
-            } else {
-              const response = results.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-              await telegramBot.sendMessage(chatId, `*Search Results for "${arg}"*\n\n${response}`, {
+              await telegramBot.sendMessage(chatId, 'No results found.', {
                 reply_to_message_id: msg.message_id,
-                parse_mode: 'Markdown'
               });
+            } else {
+              const response = results
+                .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                .join('\n');
+              await telegramBot.sendMessage(
+                chatId,
+                `*Search Results for "${arg}"*\n\n${response}`,
+                {
+                  reply_to_message_id: msg.message_id,
+                  parse_mode: 'Markdown',
+                },
+              );
             }
           }
           console.log(`\x1b[32m  -> /search processed\x1b[0m\n`);
         } else if (command === '/workspace') {
-          await telegramBot.sendMessage(chatId, `*Workspace Commands*
+          await telegramBot.sendMessage(
+            chatId,
+            `*Workspace Commands*
 
 • /workspace list - List workspaces
 • /workspace run <name> <task> - Run task in workspace
 • /workspace create <name> - Create workspace
 
 *Note:* Workspace management works best in CLI.`,
-            { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' }
+            { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' },
           );
         } else if (command === '/profile') {
           const p = loadProfile();
           if (p) {
-            await telegramBot.sendMessage(chatId, `*Your Profile*\n\n${p}`, { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' });
+            await telegramBot.sendMessage(chatId, `*Your Profile*\n\n${p}`, {
+              reply_to_message_id: msg.message_id,
+              parse_mode: 'Markdown',
+            });
           } else {
-            await telegramBot.sendMessage(chatId, "No profile set. Use /profile in CLI to set up.", { reply_to_message_id: msg.message_id });
+            await telegramBot.sendMessage(
+              chatId,
+              'No profile set. Use /profile in CLI to set up.',
+              { reply_to_message_id: msg.message_id },
+            );
           }
         } else if (command === '/memories') {
           const mems = memory.list();
           if (mems.length === 0) {
-            await telegramBot.sendMessage(chatId, "No memories stored.", { reply_to_message_id: msg.message_id });
-          } else {
-            const list = mems.slice(0, 10).map(m => `• ${m.text.slice(0, 50)}${m.text.length > 50 ? '...' : ''}`).join('\n');
-            await telegramBot.sendMessage(chatId, `*Memories* (${mems.length} total)\n\n${list}`, {
+            await telegramBot.sendMessage(chatId, 'No memories stored.', {
               reply_to_message_id: msg.message_id,
-              parse_mode: 'Markdown'
             });
+          } else {
+            const list = mems
+              .slice(0, 10)
+              .map(
+                (m) =>
+                  `• ${m.text.slice(0, 50)}${m.text.length > 50 ? '...' : ''}`,
+              )
+              .join('\n');
+            await telegramBot.sendMessage(
+              chatId,
+              `*Memories* (${mems.length} total)\n\n${list}`,
+              {
+                reply_to_message_id: msg.message_id,
+                parse_mode: 'Markdown',
+              },
+            );
           }
         } else if (command === '/claude') {
-          await telegramBot.sendMessage(chatId, "*Claude Code CLI*\n\nUse Claude Code via /claude command in CLI for complex tasks. In Telegram, just describe what you need!", {
-            reply_to_message_id: msg.message_id,
-            parse_mode: 'Markdown'
-          });
+          await telegramBot.sendMessage(
+            chatId,
+            '*Claude Code CLI*\n\nUse Claude Code via /claude command in CLI for complex tasks. In Telegram, just describe what you need!',
+            {
+              reply_to_message_id: msg.message_id,
+              parse_mode: 'Markdown',
+            },
+          );
         } else if (command === '/git') {
-          await telegramBot.sendMessage(chatId, "*Git Commands*\n\n• /git status - Check status\n• /git diff - View changes\n• /git commit - Commit changes\n• /git push - Push\n\n*Note:* Git commands work best in CLI.", {
-            reply_to_message_id: msg.message_id,
-            parse_mode: 'Markdown'
-          });
+          await telegramBot.sendMessage(
+            chatId,
+            '*Git Commands*\n\n• /git status - Check status\n• /git diff - View changes\n• /git commit - Commit changes\n• /git push - Push\n\n*Note:* Git commands work best in CLI.',
+            {
+              reply_to_message_id: msg.message_id,
+              parse_mode: 'Markdown',
+            },
+          );
         } else {
-          await telegramBot.sendMessage(chatId, `Unknown command: ${command}\n\nUse /help for available commands.`, {
-            reply_to_message_id: msg.message_id
-          });
+          await telegramBot.sendMessage(
+            chatId,
+            `Unknown command: ${command}\n\nUse /help for available commands.`,
+            {
+              reply_to_message_id: msg.message_id,
+            },
+          );
           console.log(`\x1b[90m  -> Unknown command: ${command}\x1b[0m\n`);
         }
         return;
@@ -3449,11 +4326,14 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
       console.log(`\x1b[36m  -> Processing...\x1b[0m\n`);
 
       try {
-        const { response } = await askWithMemory(msg.text || '...', await getSystemPrompt());
+        const { response } = await askWithMemory(
+          msg.text || '...',
+          await getSystemPrompt(),
+        );
         const answer = response.message?.content || 'No response';
 
         await telegramBot.sendMessage(chatId, answer, {
-          reply_to_message_id: msg.message_id
+          reply_to_message_id: msg.message_id,
         });
 
         console.log(`\x1b[32m  -> Response sent\x1b[0m\n`);
@@ -3476,7 +4356,9 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
     console.log(`\x1b[31m  [Telegram: failed to start]\x1b[0m\n`);
     console.log(`  Error: ${error.message}\n`);
     if (error.message.includes('401')) {
-      console.log('  -> Token is invalid! Check your TELEGRAM_TOKEN env var.\n');
+      console.log(
+        '  -> Token is invalid! Check your TELEGRAM_TOKEN env var.\n',
+      );
     }
     return null;
   }
