@@ -1631,6 +1631,9 @@ async function runShellCommand(cmd, confirm = true) {
 // Interactive Chat Loop
 // ============================================================================
 
+// Import unified chat handler
+import { handleChat, initChatHandler } from './lib/chatHandler.js';
+
 async function chatLoop() {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -1638,6 +1641,7 @@ async function chatLoop() {
   });
 
   await loadPersona();
+  await initChatHandler();
   writeDailyMemory('[SESSION START]');
 
   const askQuestion = () => {
@@ -1657,16 +1661,13 @@ async function chatLoop() {
         return;
       }
 
-      // Handle as natural language
-      const result = await handleNaturalLanguage(q);
+      // Use unified chat handler
+      const result = await handleChat(q, { source: 'enhanced-cli' });
 
-      if (result) {
-        console.log(`\n${result}\n`);
+      if (result.content) {
+        console.log(`\n${result.content}\n`);
       } else {
-        // Regular chat
-        const response = await sendMessage(q);
-        console.log(`\n${response.content}\n`);
-        writeDailyMemory(`[CHAT] ${q.substring(0, 80)}...`);
+        console.log(`\nI didn't understand that. Could you rephrase?\n`);
       }
 
       askQuestion();
@@ -1737,8 +1738,9 @@ async function main() {
   initWorkerSystem();
   initApiConnector();
 
-  // Initialize Action Registry
+  // Initialize Action Registry and Chat Handler
   await initActionRegistry();
+  await initChatHandler();
 
   // Start background services
   startScheduler((job) => {
@@ -1766,12 +1768,12 @@ async function main() {
       );
       process.exit(1);
     }
-    const result = await handleNaturalLanguage(message);
-    if (result) {
-      console.log(`\n${result}\n`);
+    // Use unified chat handler
+    const result = await handleChat(message, { source: 'enhanced-cli' });
+    if (result.content) {
+      console.log(`\n${result.content}\n`);
     } else {
-      const response = await sendMessage(message);
-      console.log(`\n${response.content}\n`);
+      console.log(`\nI didn't understand that. Could you rephrase?\n`);
     }
   } else {
     // Interactive mode

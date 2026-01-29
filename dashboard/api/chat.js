@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-let personaManager, vectorMemory, configManager;
+let personaManager, vectorMemory, configManager, chatHandler;
 let chatHistory = [];
 
 // Validation constants
@@ -87,7 +87,7 @@ function validateOptions(options) {
 }
 
 async function loadModules() {
-  if (personaManager) return;
+  if (personaManager && chatHandler) return;
   try {
     const personaPath = path.join(
       __dirname,
@@ -110,13 +110,12 @@ async function loadModules() {
       'lib',
       'configManager.js',
     );
-    const agentPath = path.join(
+    const chatHandlerPath = path.join(
       __dirname,
       '..',
       '..',
-      'agents',
-      'main',
-      'agent.js',
+      'lib',
+      'chatHandler.js',
     );
 
     const personaModule = await import(personaPath);
@@ -127,6 +126,14 @@ async function loadModules() {
 
     const configModule = await import(configPath);
     configManager = configModule;
+
+    const chatHandlerModule = await import(chatHandlerPath);
+    chatHandler = chatHandlerModule;
+
+    // Initialize chat handler
+    if (chatHandler.initChatHandler) {
+      await chatHandler.initChatHandler();
+    }
   } catch (error) {
     console.error('Error loading chat modules:', error.message);
   }
@@ -212,42 +219,64 @@ router.post('/', async (req, res) => {
       chatHistory = chatHistory.slice(-MAX_HISTORY_SIZE);
     }
 
-    // Simple response generation (in production, would call Ollama)
+    // Use unified chat handler
     let responseText = '';
     let usedMemory = false;
 
-    // Generate a response based on the message
-    const lowerMessage = sanitizedMessage.toLowerCase();
+    try {
+      if (chatHandler?.handleChat) {
+        const result = await chatHandler.handleChat(sanitizedMessage, {
+          source: 'dashboard',
+          context: {
+            user: { persona: activePersona },
+            conversation: { history: chatHistory },
+          },
+        });
 
-    if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-      responseText = `Hello! I'm ${activePersona?.name || 'Charlize'}, your AI assistant. How can I help you today?`;
-    } else if (lowerMessage.includes('help')) {
-      responseText = `I can help you with:\n- Answering questions\n- Writing and debugging code\n- Managing tasks and schedules\n- Searching through memories\n- And much more!\n\nJust ask me anything.`;
-    } else if (lowerMessage.includes('who are you')) {
-      responseText = `I'm ${activePersona?.name || 'Charlize'}, an AI assistant powered by local Ollama models. I can help with coding, analysis, scheduling, memory management, and general tasks.\n\nI'm running on: ${configManager?.getConfig?.('ollama.baseUrl') || 'http://localhost:11434'}`;
-    } else if (
-      lowerMessage.includes('remember') ||
-      lowerMessage.includes('store')
-    ) {
-      // Store the message as a memory
-      try {
-        if (vectorMemory?.addMemory) {
-          await vectorMemory.addMemory(sanitizedMessage, {
-            type: 'conversation',
-          });
-          responseText =
-            "I've stored that information in my memory for future reference.";
+        responseText = result.content || 'I could not process your request.';
+
+        // Check if vector memory was used
+        if (result.type === 'memory' || result.usedMemory) {
           usedMemory = true;
         }
-      } catch (e) {}
-    } else if (
-      lowerMessage.includes('status') ||
-      lowerMessage.includes('how are you')
-    ) {
-      responseText = `I'm running smoothly! Here's a quick status:\n- Active Persona: ${activePersona?.name || 'Unknown'}\n- System: Online\n- Ready to assist you with any task.`;
-    } else {
-      // Default response
-      responseText = `I received your message.\n\n${activePersona?.role ? `As ${activePersona.name} (${activePersona.role}), I'm here to help.` : "I'm here to help."}\n\nIn a full implementation, this would call Ollama to generate a proper response.`;
+      } else {
+        // Fallback to simple response generation
+        const lowerMessage = sanitizedMessage.toLowerCase();
+
+        if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+          responseText = `Hello! I'm ${activePersona?.name || 'Charlize'}, your AI assistant. How can I help you today?`;
+        } else if (lowerMessage.includes('help')) {
+          responseText = `I can help you with:\n- Answering questions\n- Writing and debugging code\n- Managing tasks and schedules\n- Searching through memories\n- And much more!\n\nJust ask me anything.`;
+        } else if (lowerMessage.includes('who are you')) {
+          responseText = `I'm ${activePersona?.name || 'Charlize'}, an AI assistant powered by local Ollama models. I can help with coding, analysis, scheduling, memory management, and general tasks.\n\nI'm running on: ${configManager?.getConfig?.('ollama.baseUrl') || 'http://localhost:11434'}`;
+        } else if (
+          lowerMessage.includes('remember') ||
+          lowerMessage.includes('store')
+        ) {
+          // Store the message as a memory
+          try {
+            if (vectorMemory?.addMemory) {
+              await vectorMemory.addMemory(sanitizedMessage, {
+                type: 'conversation',
+              });
+              responseText =
+                "I've stored that information in my memory for future reference.";
+              usedMemory = true;
+            }
+          } catch (e) {}
+        } else if (
+          lowerMessage.includes('status') ||
+          lowerMessage.includes('how are you')
+        ) {
+          responseText = `I'm running smoothly! Here's a quick status:\n- Active Persona: ${activePersona?.name || 'Unknown'}\n- System: Online\n- Ready to assist you with any task.`;
+        } else {
+          // Default response
+          responseText = `I received your message.\n\n${activePersona?.role ? `As ${activePersona.name} (${activePersona.role}), I'm here to help.` : "I'm here to help."}\n\nIn a full implementation, this would call Ollama to generate a proper response.`;
+        }
+      }
+    } catch (error) {
+      console.error('[Chat API] Error using chat handler:', error.message);
+      responseText = 'Sorry, I encountered an error processing your request.';
     }
 
     // Add context about stored memory

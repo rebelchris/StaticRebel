@@ -21,6 +21,9 @@ import https from 'https';
 import os from 'os';
 import { spawn } from 'child_process';
 
+// Unified chat handler
+import { handleChat, initChatHandler } from './lib/chatHandler.js';
+
 // Core modules (NEW)
 import {
   loadConfig,
@@ -1090,7 +1093,9 @@ function safeJsonParse(str, fallback = null) {
 async function webSearch(query, limit = 5) {
   // Web search temporarily disabled - requires API configuration
   console.log('🔍 Web search is temporarily disabled.');
-  console.log('To enable, configure TAVILY_API_KEY or SEARXNG_URL in your .env file');
+  console.log(
+    'To enable, configure TAVILY_API_KEY or SEARXNG_URL in your .env file',
+  );
   return [];
 
   /* Original DuckDuckGo implementation disabled
@@ -1766,11 +1771,7 @@ async function askWithMemory(userMessage, systemPrompt) {
 /**
  * Goals and targets system
  */
-const GOALS_FILE = path.join(
-  os.homedir(),
-  '.static-rebel',
-  'goals.json'
-);
+const GOALS_FILE = path.join(os.homedir(), '.static-rebel', 'goals.json');
 
 function loadGoals() {
   try {
@@ -1804,10 +1805,10 @@ function detectGoalStatement(userInput) {
     /my goal is (\d+)/i,
     /target of (\d+)/i,
     /aim for (\d+)/i,
-    /trying to (hit|reach|get to) (\d+)/i
+    /trying to (hit|reach|get to) (\d+)/i,
   ];
 
-  return goalPatterns.some(pattern => pattern.test(userInput));
+  return goalPatterns.some((pattern) => pattern.test(userInput));
 }
 
 /**
@@ -1818,7 +1819,7 @@ async function parseGoal(userInput, trackers) {
 
 "${userInput}"
 
-Available trackers: ${trackers.map(t => `${t.name} (${t.type})`).join(', ')}
+Available trackers: ${trackers.map((t) => `${t.name} (${t.type})`).join(', ')}
 
 Respond with ONLY valid JSON:
 {
@@ -1835,8 +1836,11 @@ Examples:
 
   try {
     const response = await askOllama([
-      { role: 'system', content: 'You are a goal parser. Output only valid JSON.' },
-      { role: 'user', content: prompt }
+      {
+        role: 'system',
+        content: 'You are a goal parser. Output only valid JSON.',
+      },
+      { role: 'user', content: prompt },
     ]);
 
     const content = response.message?.content;
@@ -1858,7 +1862,9 @@ function checkGoalProgress(goals, trackers, trackStore, queryEngine) {
   const updates = [];
 
   for (const goal of goals.goals) {
-    const tracker = trackers.find(t => t.type === goal.trackerType || t.name === goal.trackerName);
+    const tracker = trackers.find(
+      (t) => t.type === goal.trackerType || t.name === goal.trackerName,
+    );
     if (!tracker) continue;
 
     let stats;
@@ -1890,7 +1896,7 @@ function checkGoalProgress(goals, trackers, trackStore, queryEngine) {
       progress,
       remaining,
       achieved: current >= goal.target,
-      period: goal.period
+      period: goal.period,
     });
   }
 
@@ -1902,10 +1908,10 @@ function checkGoalProgress(goals, trackers, trackStore, queryEngine) {
  */
 function analyzeUserPatterns(trackers, trackStore) {
   const patterns = {
-    timePatterns: {},      // When user usually tracks
-    dayPatterns: {},       // Which days they track
+    timePatterns: {}, // When user usually tracks
+    dayPatterns: {}, // Which days they track
     frequencyPatterns: {}, // How often they track
-    valuePatterns: {}      // Common values/amounts
+    valuePatterns: {}, // Common values/amounts
   };
 
   for (const tracker of trackers) {
@@ -1942,14 +1948,15 @@ function analyzeUserPatterns(trackers, trackStore) {
     }
 
     // Find most common hour
-    const mostCommonHour = Object.entries(timesByHour)
-      .sort((a, b) => b[1] - a[1])[0];
+    const mostCommonHour = Object.entries(timesByHour).sort(
+      (a, b) => b[1] - a[1],
+    )[0];
 
     if (mostCommonHour && mostCommonHour[1] >= 2) {
       patterns.timePatterns[trackerName] = {
         hour: parseInt(mostCommonHour[0]),
         frequency: mostCommonHour[1],
-        total: records.length
+        total: records.length,
       };
     }
 
@@ -1958,8 +1965,16 @@ function analyzeUserPatterns(trackers, trackStore) {
       .filter(([day, count]) => count >= 2)
       .map(([day, count]) => ({
         day: parseInt(day),
-        dayName: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][parseInt(day)],
-        count
+        dayName: [
+          'Sunday',
+          'Monday',
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+        ][parseInt(day)],
+        count,
       }));
 
     if (mostCommonDays.length > 0) {
@@ -1975,7 +1990,7 @@ function analyzeUserPatterns(trackers, trackStore) {
       patterns.valuePatterns[trackerName][key] = {
         average: Math.round(avg),
         min: Math.min(...vals),
-        max: Math.max(...vals)
+        max: Math.max(...vals),
       };
     }
   }
@@ -1999,7 +2014,7 @@ function generatePredictions(patterns, trackers, trackStore) {
     const timePattern = patterns.timePatterns[trackerName];
     if (timePattern && Math.abs(timePattern.hour - currentHour) <= 1) {
       const records = trackStore.getRecords(trackerName).records || [];
-      const todayRecords = records.filter(r => {
+      const todayRecords = records.filter((r) => {
         const recordDate = new Date(r.timestamp).toDateString();
         return recordDate === now.toDateString();
       });
@@ -2010,7 +2025,7 @@ function generatePredictions(patterns, trackers, trackStore) {
           tracker: tracker,
           message: `You usually log ${tracker.displayName} around this time.`,
           confidence: timePattern.frequency / timePattern.total,
-          priority: 'medium'
+          priority: 'medium',
         });
       }
     }
@@ -2018,10 +2033,10 @@ function generatePredictions(patterns, trackers, trackStore) {
     // Check if user usually logs on this day
     const dayPattern = patterns.dayPatterns[trackerName];
     if (dayPattern) {
-      const todayPattern = dayPattern.find(p => p.day === currentDay);
+      const todayPattern = dayPattern.find((p) => p.day === currentDay);
       if (todayPattern) {
         const records = trackStore.getRecords(trackerName).records || [];
-        const todayRecords = records.filter(r => {
+        const todayRecords = records.filter((r) => {
           const recordDate = new Date(r.timestamp).toDateString();
           return recordDate === now.toDateString();
         });
@@ -2032,7 +2047,7 @@ function generatePredictions(patterns, trackers, trackStore) {
             tracker: tracker,
             message: `It's ${todayPattern.dayName}! You usually track ${tracker.displayName} on ${todayPattern.dayName}s.`,
             confidence: todayPattern.count / 10, // Arbitrary confidence
-            priority: 'low'
+            priority: 'low',
           });
         }
       }
@@ -2048,7 +2063,7 @@ function generatePredictions(patterns, trackers, trackStore) {
 const LEARNING_LOG_FILE = path.join(
   os.homedir(),
   '.static-rebel',
-  'learning-log.json'
+  'learning-log.json',
 );
 
 function loadLearningLog() {
@@ -2086,7 +2101,7 @@ function recordLearning(type, context) {
       type, // 'correction', 'misclassification', 'wrong_tracker', etc.
       timestamp: Date.now(),
       date: new Date().toISOString().split('T')[0],
-      ...context
+      ...context,
     };
 
     log.lessons.push(lesson);
@@ -2116,7 +2131,7 @@ function recordLearning(type, context) {
 function getLearningPatterns(type) {
   try {
     const log = loadLearningLog();
-    const relevantLessons = log.lessons.filter(l => l.type === type);
+    const relevantLessons = log.lessons.filter((l) => l.type === type);
 
     // Build patterns from lessons
     const patterns = {};
@@ -2155,17 +2170,20 @@ function generateProactiveInsights(trackers, trackStore, queryEngine) {
       insights.push({
         type: 'streak',
         message: `🔥 You've logged ${weekCount} workouts this week! Keep it up!`,
-        priority: 'high'
+        priority: 'high',
       });
     }
 
     // Insight: Improvement
     if (weekCount > lastWeekCount && lastWeekCount > 0) {
-      const improvement = ((weekCount - lastWeekCount) / lastWeekCount * 100).toFixed(0);
+      const improvement = (
+        ((weekCount - lastWeekCount) / lastWeekCount) *
+        100
+      ).toFixed(0);
       insights.push({
         type: 'improvement',
         message: `📈 ${improvement}% more ${tracker.type} entries than last week!`,
-        priority: 'medium'
+        priority: 'medium',
       });
     }
 
@@ -2174,7 +2192,7 @@ function generateProactiveInsights(trackers, trackStore, queryEngine) {
       insights.push({
         type: 'consistency',
         message: `⭐ Perfect week! You logged your ${tracker.displayName} every day.`,
-        priority: 'high'
+        priority: 'high',
       });
     }
 
@@ -2185,19 +2203,21 @@ function generateProactiveInsights(trackers, trackStore, queryEngine) {
       insights.push({
         type: 'milestone',
         message: `🎉 Milestone: ${totalCount} total entries in ${tracker.displayName}!`,
-        priority: 'high'
+        priority: 'high',
       });
     }
 
     // Insight: Inactive tracker
     if (allRecords.length > 0 && todayCount === 0 && weekCount === 0) {
       const lastEntry = allRecords[allRecords.length - 1];
-      const daysSince = Math.floor((Date.now() - lastEntry.timestamp) / (1000 * 60 * 60 * 24));
+      const daysSince = Math.floor(
+        (Date.now() - lastEntry.timestamp) / (1000 * 60 * 60 * 24),
+      );
       if (daysSince >= 7 && daysSince < 30) {
         insights.push({
           type: 'inactive',
           message: `⏰ It's been ${daysSince} days since your last ${tracker.displayName} entry.`,
-          priority: 'low'
+          priority: 'low',
         });
       }
     }
@@ -2209,7 +2229,7 @@ function generateProactiveInsights(trackers, trackStore, queryEngine) {
           insights.push({
             type: 'goal',
             message: `💪 Over 10,000 calories tracked this week!`,
-            priority: 'medium'
+            priority: 'medium',
           });
         }
       }
@@ -2218,7 +2238,9 @@ function generateProactiveInsights(trackers, trackStore, queryEngine) {
 
   // Sort by priority
   const priorityOrder = { high: 3, medium: 2, low: 1 };
-  insights.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+  insights.sort(
+    (a, b) => priorityOrder[b.priority] - priorityOrder[a.priority],
+  );
 
   return insights.slice(0, 3); // Return top 3 insights
 }
@@ -2226,38 +2248,51 @@ function generateProactiveInsights(trackers, trackStore, queryEngine) {
 /**
  * Generates smart suggestions based on patterns and goals
  */
-function generateSmartSuggestions(trackers, trackStore, queryEngine, patterns, goals) {
+function generateSmartSuggestions(
+  trackers,
+  trackStore,
+  queryEngine,
+  patterns,
+  goals,
+) {
   const suggestions = [];
   const now = new Date();
   const currentHour = now.getHours();
 
   for (const tracker of trackers) {
-    const todayRecords = trackStore.getRecords(tracker.name).records?.filter(r => {
-      const recordDate = new Date(r.timestamp).toDateString();
-      return recordDate === now.toDateString();
-    }) || [];
+    const todayRecords =
+      trackStore.getRecords(tracker.name).records?.filter((r) => {
+        const recordDate = new Date(r.timestamp).toDateString();
+        return recordDate === now.toDateString();
+      }) || [];
 
     // Suggestion: Haven't logged today but usually do
     if (todayRecords.length === 0 && currentHour >= 12) {
-      const weekRecords = queryEngine.getStats(tracker.name, 'week').records || [];
+      const weekRecords =
+        queryEngine.getStats(tracker.name, 'week').records || [];
       if (weekRecords.length >= 3) {
         suggestions.push({
           type: 'missing_today',
           message: `📝 You haven't logged ${tracker.displayName} today yet.`,
           tracker: tracker,
-          priority: 'low'
+          priority: 'low',
         });
       }
     }
 
     // Suggestion: Goal progress
     if (goals && goals.goals) {
-      const trackerGoals = goals.goals.filter(g =>
-        g.trackerType === tracker.type || g.trackerName === tracker.name
+      const trackerGoals = goals.goals.filter(
+        (g) => g.trackerType === tracker.type || g.trackerName === tracker.name,
       );
 
       for (const goal of trackerGoals) {
-        const progress = checkGoalProgress({ goals: [goal] }, trackers, trackStore, queryEngine);
+        const progress = checkGoalProgress(
+          { goals: [goal] },
+          trackers,
+          trackStore,
+          queryEngine,
+        );
         if (progress.length > 0) {
           const goalProgress = progress[0];
 
@@ -2266,14 +2301,14 @@ function generateSmartSuggestions(trackers, trackStore, queryEngine, patterns, g
               type: 'goal_almost',
               message: `🎯 Almost there! ${goalProgress.remaining} more ${goal.metric} to reach your ${goal.period} goal!`,
               tracker: tracker,
-              priority: 'high'
+              priority: 'high',
             });
           } else if (goalProgress.achieved && goalProgress.progress === 100) {
             suggestions.push({
               type: 'goal_achieved',
               message: `🎉 Goal achieved! You hit your ${goal.target} ${goal.metric} target for ${goal.period}!`,
               tracker: tracker,
-              priority: 'high'
+              priority: 'high',
             });
           }
         }
@@ -2290,13 +2325,14 @@ function generateSmartSuggestions(trackers, trackStore, queryEngine, patterns, g
             const avg = valuePattern[key].average;
             const deviation = Math.abs(value - avg) / avg;
 
-            if (deviation > 0.5) { // 50% deviation
+            if (deviation > 0.5) {
+              // 50% deviation
               const direction = value > avg ? 'higher' : 'lower';
               suggestions.push({
                 type: 'unusual_value',
                 message: `📊 That ${key} (${value}) is ${direction} than your usual ${avg}.`,
                 tracker: tracker,
-                priority: 'low'
+                priority: 'low',
               });
             }
           }
@@ -2307,7 +2343,9 @@ function generateSmartSuggestions(trackers, trackStore, queryEngine, patterns, g
 
   // Sort by priority
   const priorityOrder = { high: 3, medium: 2, low: 1 };
-  suggestions.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+  suggestions.sort(
+    (a, b) => priorityOrder[b.priority] - priorityOrder[a.priority],
+  );
 
   return suggestions.slice(0, 2); // Top 2 suggestions
 }
@@ -2354,10 +2392,12 @@ async function detectAndExecuteActionIntents(llmResponse, userInput) {
 
     // Detect action patterns in LLM response
     const actionPatterns = {
-      showStats: /let me (show|check|pull up|get) (your|the|those)? ?(stats|statistics|numbers|data)/i,
-      showHistory: /let me (show|check|pull up|get|display) (your|the)? ?(history|log|entries|records)/i,
+      showStats:
+        /let me (show|check|pull up|get) (your|the|those)? ?(stats|statistics|numbers|data)/i,
+      showHistory:
+        /let me (show|check|pull up|get|display) (your|the)? ?(history|log|entries|records)/i,
       compareData: /let me compare|i'll compare|comparing/i,
-      createTracker: /let me create|i'll create|creating a tracker/i
+      createTracker: /let me create|i'll create|creating a tracker/i,
     };
 
     let detectedAction = null;
@@ -2386,8 +2426,11 @@ Respond with ONLY valid JSON:
 }`;
 
     const extractResponse = await askOllama([
-      { role: 'system', content: 'You are an action intent parser. Output only valid JSON.' },
-      { role: 'user', content: extractPrompt }
+      {
+        role: 'system',
+        content: 'You are an action intent parser. Output only valid JSON.',
+      },
+      { role: 'user', content: extractPrompt },
     ]);
 
     const extractContent = extractResponse.message?.content;
@@ -2404,8 +2447,10 @@ Respond with ONLY valid JSON:
     } else {
       // Try to infer from user input
       for (const tracker of trackers) {
-        if (userInput.toLowerCase().includes(tracker.name) ||
-            userInput.toLowerCase().includes(tracker.type)) {
+        if (
+          userInput.toLowerCase().includes(tracker.name) ||
+          userInput.toLowerCase().includes(tracker.type)
+        ) {
           targetTracker = tracker;
           break;
         }
@@ -2427,7 +2472,10 @@ Respond with ONLY valid JSON:
       const stats = queryEngine.getStats(targetTracker.name, period);
       result = queryEngine.formatStats(stats);
       console.log('\n' + result);
-    } else if (intent.action === 'history' || detectedAction === 'showHistory') {
+    } else if (
+      intent.action === 'history' ||
+      detectedAction === 'showHistory'
+    ) {
       const records = trackStore.getRecentRecords(targetTracker.name, 10);
       result = queryEngine.formatHistory(records);
       console.log('\n' + result);
@@ -2437,7 +2485,7 @@ Respond with ONLY valid JSON:
       return {
         action: intent.action || detectedAction,
         tracker: targetTracker,
-        executed: true
+        executed: true,
       };
     }
 
@@ -2465,10 +2513,11 @@ async function routeNaturalLanguageQuery(userInput) {
 
     // Detect query patterns
     const queryPatterns = {
-      history: /show (me )?(my )?|list (my )?|what (are|were|was|is) (my )?|view (my )?/i,
+      history:
+        /show (me )?(my )?|list (my )?|what (are|were|was|is) (my )?|view (my )?/i,
       stats: /how many|how much|total|average|sum of|stats|statistics/i,
       compare: /compare|versus|vs\.?|difference between/i,
-      last: /last (entry|time|one)|most recent|latest/i
+      last: /last (entry|time|one)|most recent|latest/i,
     };
 
     let queryType = null;
@@ -2488,7 +2537,7 @@ async function routeNaturalLanguageQuery(userInput) {
 
 "${userInput}"
 
-Available trackers: ${trackers.map(t => `${t.name} (${t.type})`).join(', ')}
+Available trackers: ${trackers.map((t) => `${t.name} (${t.type})`).join(', ')}
 
 Respond with ONLY valid JSON:
 {
@@ -2504,12 +2553,17 @@ Examples:
 - "what was my last run" -> {trackerName: null, trackerType: "workout", period: null, confidence: 0.85}`;
 
     const extractResponse = await askOllama([
-      { role: 'system', content: 'You are a query parser. Output only valid JSON.' },
-      { role: 'user', content: extractPrompt }
+      {
+        role: 'system',
+        content: 'You are a query parser. Output only valid JSON.',
+      },
+      { role: 'user', content: extractPrompt },
     ]);
 
     const extractContent = extractResponse.message?.content;
-    const extracted = JSON.parse(extractContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+    const extracted = JSON.parse(
+      extractContent.match(/\{[\s\S]*\}/)?.[0] || '{}',
+    );
 
     if (extracted.confidence < 0.6) {
       return null;
@@ -2552,7 +2606,7 @@ Examples:
       return {
         tracker: targetTracker,
         queryType,
-        executed: true
+        executed: true,
       };
     }
 
@@ -2580,22 +2634,23 @@ function findMatchingTracker(trackers, targetType) {
     medication: ['med', 'pill', 'supplement', 'vitamin', 'drug'],
     weight: ['body', 'scale', 'mass'],
     finance: ['money', 'budget', 'expense', 'spending'],
-    productivity: ['task', 'todo', 'work', 'focus']
+    productivity: ['task', 'todo', 'work', 'focus'],
   };
 
   // First, try exact type match
-  let match = trackers.find(t => t.type === targetType);
+  let match = trackers.find((t) => t.type === targetType);
   if (match) return match;
 
   // Then try synonym matching
   for (const [mainType, synonyms] of Object.entries(typeSynonyms)) {
     if (targetType === mainType || synonyms.includes(targetType)) {
       // Check if any tracker matches this type or its synonyms
-      match = trackers.find(t =>
-        t.type === mainType ||
-        synonyms.includes(t.type) ||
-        t.name.toLowerCase().includes(mainType) ||
-        synonyms.some(syn => t.name.toLowerCase().includes(syn))
+      match = trackers.find(
+        (t) =>
+          t.type === mainType ||
+          synonyms.includes(t.type) ||
+          t.name.toLowerCase().includes(mainType) ||
+          synonyms.some((syn) => t.name.toLowerCase().includes(syn)),
       );
       if (match) return match;
     }
@@ -2615,10 +2670,10 @@ function detectUndo(userInput) {
     /remove (that|the last one|last entry)/i,
     /cancel (that|the last one)/i,
     /nevermind|never mind/i,
-    /scratch that/i
+    /scratch that/i,
   ];
 
-  return undoPatterns.some(pattern => pattern.test(userInput));
+  return undoPatterns.some((pattern) => pattern.test(userInput));
 }
 
 /**
@@ -2629,8 +2684,10 @@ function handleUndo(trackers, trackStore) {
   const recentTracker = trackers.sort((a, b) => {
     const aRecords = trackStore.getRecords(a.name).records || [];
     const bRecords = trackStore.getRecords(b.name).records || [];
-    const aLast = aRecords.length > 0 ? aRecords[aRecords.length - 1].timestamp : 0;
-    const bLast = bRecords.length > 0 ? bRecords[bRecords.length - 1].timestamp : 0;
+    const aLast =
+      aRecords.length > 0 ? aRecords[aRecords.length - 1].timestamp : 0;
+    const bLast =
+      bRecords.length > 0 ? bRecords[bRecords.length - 1].timestamp : 0;
     return bLast - aLast;
   })[0];
 
@@ -2648,7 +2705,7 @@ function handleUndo(trackers, trackStore) {
   const lastRecord = allRecords[allRecords.length - 1];
 
   // Delete the last record
-  const updatedRecords = allRecords.filter(r => r.id !== lastRecord.id);
+  const updatedRecords = allRecords.filter((r) => r.id !== lastRecord.id);
   records.records = updatedRecords;
 
   // Save back
@@ -2657,14 +2714,14 @@ function handleUndo(trackers, trackStore) {
     '.static-rebel',
     'trackers',
     recentTracker.name,
-    'records.json'
+    'records.json',
   );
 
   try {
     fs.writeFileSync(recordsFile, JSON.stringify(records, null, 2));
     return {
       tracker: recentTracker,
-      deletedEntry: lastRecord
+      deletedEntry: lastRecord,
     };
   } catch (e) {
     return null;
@@ -2680,10 +2737,10 @@ function detectCorrection(userInput) {
     /\*|fix:|edit:|change:|update:/i,
     /it was (\d+) not (\d+)/i,
     /should be|should have been/i,
-    /wrong|mistake|incorrect/i
+    /wrong|mistake|incorrect/i,
   ];
 
-  return correctionPatterns.some(pattern => pattern.test(userInput));
+  return correctionPatterns.some((pattern) => pattern.test(userInput));
 }
 
 /**
@@ -2697,7 +2754,10 @@ function parseTimeFromInput(userInput) {
 
     // Relative times
     { pattern: /(\d+)\s*(hour|hr|hours|hrs)\s*ago/i, type: 'hours_ago' },
-    { pattern: /(\d+)\s*(minute|min|minutes|mins)\s*ago/i, type: 'minutes_ago' },
+    {
+      pattern: /(\d+)\s*(minute|min|minutes|mins)\s*ago/i,
+      type: 'minutes_ago',
+    },
 
     // Time of day
     { pattern: /this morning|in the morning/i, type: 'morning' },
@@ -2707,7 +2767,7 @@ function parseTimeFromInput(userInput) {
 
     // Earlier today
     { pattern: /earlier today|earlier/i, type: 'earlier' },
-    { pattern: /just now|right now/i, type: 'now' }
+    { pattern: /just now|right now/i, type: 'now' },
   ];
 
   for (const { pattern, type } of timePatterns) {
@@ -2741,11 +2801,11 @@ function parseTimeFromInput(userInput) {
 
         case 'hours_ago':
           const hoursAgo = parseInt(match[1]);
-          return now.getTime() - (hoursAgo * 60 * 60 * 1000);
+          return now.getTime() - hoursAgo * 60 * 60 * 1000;
 
         case 'minutes_ago':
           const minutesAgo = parseInt(match[1]);
-          return now.getTime() - (minutesAgo * 60 * 1000);
+          return now.getTime() - minutesAgo * 60 * 1000;
 
         case 'morning':
           const morning = new Date(now);
@@ -2769,7 +2829,7 @@ function parseTimeFromInput(userInput) {
 
         case 'earlier':
           // 2 hours ago as default for "earlier"
-          return now.getTime() - (2 * 60 * 60 * 1000);
+          return now.getTime() - 2 * 60 * 60 * 1000;
 
         case 'now':
           return now.getTime();
@@ -2802,8 +2862,11 @@ Examples:
 
   try {
     const response = await askOllama([
-      { role: 'system', content: 'You are a correction parser. Output only valid JSON.' },
-      { role: 'user', content: prompt }
+      {
+        role: 'system',
+        content: 'You are a correction parser. Output only valid JSON.',
+      },
+      { role: 'user', content: prompt },
     ]);
 
     const content = response.message?.content;
@@ -2829,7 +2892,10 @@ Examples:
 async function detectAndRouteTrackableData(userInput) {
   try {
     // Skip if it's a question or command
-    const isQuestion = /\?|^(how|what|when|where|why|who|which|can you|could you|would you|do you|does|is|are|will|show me|tell me)/i.test(userInput);
+    const isQuestion =
+      /\?|^(how|what|when|where|why|who|which|can you|could you|would you|do you|does|is|are|will|show me|tell me)/i.test(
+        userInput,
+      );
     if (isQuestion || userInput.startsWith('/') || userInput.startsWith('@')) {
       return null;
     }
@@ -2841,11 +2907,13 @@ async function detectAndRouteTrackableData(userInput) {
     if (detectUndo(userInput) && trackers.length > 0) {
       const undoResult = handleUndo(trackers, trackStore);
       if (undoResult) {
-        console.log(`  \x1b[31m[Deleted last entry from @${undoResult.tracker.name}]\x1b[0m`);
+        console.log(
+          `  \x1b[31m[Deleted last entry from @${undoResult.tracker.name}]\x1b[0m`,
+        );
         return {
           tracker: undoResult.tracker,
           data: undoResult.deletedEntry.data,
-          undone: true
+          undone: true,
         };
       }
     }
@@ -2856,8 +2924,10 @@ async function detectAndRouteTrackableData(userInput) {
       const recentTracker = trackers.sort((a, b) => {
         const aRecords = trackStore.getRecords(a.name).records || [];
         const bRecords = trackStore.getRecords(b.name).records || [];
-        const aLast = aRecords.length > 0 ? aRecords[aRecords.length - 1].timestamp : 0;
-        const bLast = bRecords.length > 0 ? bRecords[bRecords.length - 1].timestamp : 0;
+        const aLast =
+          aRecords.length > 0 ? aRecords[aRecords.length - 1].timestamp : 0;
+        const bLast =
+          bRecords.length > 0 ? bRecords[bRecords.length - 1].timestamp : 0;
         return bLast - aLast;
       })[0];
 
@@ -2867,14 +2937,23 @@ async function detectAndRouteTrackableData(userInput) {
           const lastRecord = records[records.length - 1];
 
           // Parse the correction
-          const correction = await parseCorrection(userInput, recentTracker.type);
+          const correction = await parseCorrection(
+            userInput,
+            recentTracker.type,
+          );
 
           if (correction && correction.field) {
             const newData = { [correction.field]: correction.value };
-            const result = trackStore.updateRecord(recentTracker.name, lastRecord.id, newData);
+            const result = trackStore.updateRecord(
+              recentTracker.name,
+              lastRecord.id,
+              newData,
+            );
 
             if (result.success) {
-              console.log(`  \x1b[33m[Corrected @${recentTracker.name}: ${correction.field}=${correction.value}]\x1b[0m`);
+              console.log(
+                `  \x1b[33m[Corrected @${recentTracker.name}: ${correction.field}=${correction.value}]\x1b[0m`,
+              );
 
               // Record learning: user had to correct something
               recordLearning('correction', {
@@ -2882,7 +2961,7 @@ async function detectAndRouteTrackableData(userInput) {
                 previousValue: lastRecord.data[correction.field],
                 correctedValue: correction.value,
                 field: correction.field,
-                trackerType: recentTracker.type
+                trackerType: recentTracker.type,
               });
 
               return {
@@ -2890,7 +2969,7 @@ async function detectAndRouteTrackableData(userInput) {
                 data: result.record.data,
                 corrected: true,
                 field: correction.field,
-                value: correction.value
+                value: correction.value,
               };
             }
           }
@@ -2918,12 +2997,17 @@ Examples:
 - "What's the weather?" -> {trackable: false}`;
 
     const detectionResponse = await askOllama([
-      { role: 'system', content: 'You are a data classifier. Output only valid JSON.' },
-      { role: 'user', content: detectionPrompt }
+      {
+        role: 'system',
+        content: 'You are a data classifier. Output only valid JSON.',
+      },
+      { role: 'user', content: detectionPrompt },
     ]);
 
     const detectionContent = detectionResponse.message?.content;
-    const detection = JSON.parse(detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+    const detection = JSON.parse(
+      detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}',
+    );
 
     // If not trackable or low confidence, skip
     if (!detection.trackable || detection.confidence < 0.6) {
@@ -2932,15 +3016,22 @@ Examples:
 
     // Step 2: Check if a suitable tracker already exists (using smart matching)
     // Note: trackStore and trackers are already declared at the top of this function
-    const matchingTracker = findMatchingTracker(trackers, detection.trackerType);
+    const matchingTracker = findMatchingTracker(
+      trackers,
+      detection.trackerType,
+    );
 
     let targetTracker = matchingTracker;
 
     // Step 3: Auto-create tracker if it doesn't exist
     if (!targetTracker) {
-      console.log(`  \x1b[36m[Auto-creating ${detection.trackerType} tracker...]\x1b[0m`);
+      console.log(
+        `  \x1b[36m[Auto-creating ${detection.trackerType} tracker...]\x1b[0m`,
+      );
 
-      const trackerConfig = await parseTrackerFromNaturalLanguage(detection.description);
+      const trackerConfig = await parseTrackerFromNaturalLanguage(
+        detection.description,
+      );
       if (!trackerConfig) {
         return null;
       }
@@ -2959,10 +3050,14 @@ Examples:
     const parsed = await parseRecordFromText(
       targetTracker.name,
       userInput,
-      targetTracker.type
+      targetTracker.type,
     );
 
-    if (!parsed.success || !parsed.data || Object.keys(parsed.data).length === 0) {
+    if (
+      !parsed.success ||
+      !parsed.data ||
+      Object.keys(parsed.data).length === 0
+    ) {
       return null;
     }
 
@@ -2970,7 +3065,7 @@ Examples:
     const customTimestamp = parseTimeFromInput(userInput);
     const recordData = {
       data: parsed.data,
-      source: 'auto-detect'
+      source: 'auto-detect',
     };
 
     // Add custom timestamp if found
@@ -2985,7 +3080,7 @@ Examples:
       return {
         tracker: targetTracker,
         data: parsed.data,
-        created: !matchingTracker
+        created: !matchingTracker,
       };
     }
 
@@ -4991,7 +5086,9 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
             queryResult = await routeNaturalLanguageQuery(q);
           } catch (e) {
             if (VERBOSE) {
-              console.log(`  \x1b[90m[Query routing error: ${e.message}]\x1b[0m`);
+              console.log(
+                `  \x1b[90m[Query routing error: ${e.message}]\x1b[0m`,
+              );
             }
           }
 
@@ -5009,7 +5106,9 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
             } catch (e) {
               // Silently fail - don't disrupt the conversation
               if (VERBOSE) {
-                console.log(`  \x1b[90m[Auto-track error: ${e.message}]\x1b[0m`);
+                console.log(
+                  `  \x1b[90m[Auto-track error: ${e.message}]\x1b[0m`,
+                );
               }
             }
           }
@@ -5051,12 +5150,16 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
           try {
             const actionIntent = await detectAndExecuteActionIntents(answer, q);
             if (actionIntent && actionIntent.executed) {
-              console.log(`  \x1b[90m[Auto-executed: ${actionIntent.action} for @${actionIntent.tracker.name}]\x1b[0m\n`);
+              console.log(
+                `  \x1b[90m[Auto-executed: ${actionIntent.action} for @${actionIntent.tracker.name}]\x1b[0m\n`,
+              );
             }
           } catch (e) {
             // Silently fail
             if (VERBOSE) {
-              console.log(`  \x1b[90m[Action intent error: ${e.message}]\x1b[0m`);
+              console.log(
+                `  \x1b[90m[Action intent error: ${e.message}]\x1b[0m`,
+              );
             }
           }
 
@@ -5107,7 +5210,11 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
               const trackStore = new TrackerStore();
               const queryEngine = new QueryEngine();
               const trackers = trackStore.listTrackers();
-              const insights = generateProactiveInsights(trackers, trackStore, queryEngine);
+              const insights = generateProactiveInsights(
+                trackers,
+                trackStore,
+                queryEngine,
+              );
 
               // Show insights occasionally (20% chance to avoid being annoying)
               if (insights.length > 0 && Math.random() < 0.2) {
@@ -5192,7 +5299,11 @@ async function startTelegramBot() {
   }
 
   // Check for placeholder tokens
-  if (tokenToUse.includes('YOUR_') || tokenToUse.includes('_HERE') || tokenToUse.length < 30) {
+  if (
+    tokenToUse.includes('YOUR_') ||
+    tokenToUse.includes('_HERE') ||
+    tokenToUse.length < 30
+  ) {
     console.log(
       '\x1b[33m  [Telegram: token appears to be a placeholder, skipping]\x1b[0m\n',
     );
@@ -5220,18 +5331,21 @@ async function startTelegramBot() {
 
   // Stop existing bot if token changed
   if (telegramBot && currentTelegramToken !== tokenToUse) {
-    console.log('\x1b[33m  [Telegram: token changed, restarting bot...]\x1b[0m\n');
+    console.log(
+      '\x1b[33m  [Telegram: token changed, restarting bot...]\x1b[0m\n',
+    );
     try {
       telegramBot.stopPolling();
       telegramBot = null;
     } catch (e) {
-      console.log(`\x1b[90m  [Telegram: error stopping old bot: ${e.message}]\x1b[0m\n`);
+      console.log(
+        `\x1b[90m  [Telegram: error stopping old bot: ${e.message}]\x1b[0m\n`,
+      );
     }
   }
 
   // Show masked token for debugging
-  const maskedToken =
-    tokenToUse.slice(0, 8) + '...' + tokenToUse.slice(-5);
+  const maskedToken = tokenToUse.slice(0, 8) + '...' + tokenToUse.slice(-5);
   console.log(
     `\x1b[33m  [Telegram: connecting with token ${maskedToken}...]\x1b[0m\n`,
   );
@@ -5481,13 +5595,21 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
                     ? 'Markdown'
                     : undefined,
                 });
-                logToFile('telegram-out', 'info', analysisText.slice(0, 500), { chatId, context: 'image-analysis' });
+                logToFile('telegram-out', 'info', analysisText.slice(0, 500), {
+                  chatId,
+                  context: 'image-analysis',
+                });
                 console.log(`\x1b[32m  -> Image analysis sent\x1b[0m\n`);
               } else {
                 console.error(
                   `\x1b[31m  -> Background image error: Empty or invalid analysis result\x1b[0m\n`,
                 );
-                logToFile('telegram-error', 'error', 'Empty or invalid analysis result', { chatId, context: 'image-analysis' });
+                logToFile(
+                  'telegram-error',
+                  'error',
+                  'Empty or invalid analysis result',
+                  { chatId, context: 'image-analysis' },
+                );
                 try {
                   await telegramBot.sendMessage(
                     chatId,
@@ -5499,7 +5621,10 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
               console.error(
                 `\x1b[31m  -> Background image error: ${error.message}\x1b[0m\n`,
               );
-              logToFile('telegram-error', 'error', error.message, { chatId, context: 'image-analysis-background' });
+              logToFile('telegram-error', 'error', error.message, {
+                chatId,
+                context: 'image-analysis-background',
+              });
               try {
                 await telegramBot.sendMessage(
                   chatId,
@@ -5510,7 +5635,10 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
           })();
         } catch (error) {
           console.error(`\x1b[31m  -> Image error: ${error.message}\x1b[0m\n`);
-          logToFile('telegram-error', 'error', error.message, { chatId, context: 'image-processing' });
+          logToFile('telegram-error', 'error', error.message, {
+            chatId,
+            context: 'image-processing',
+          });
           await telegramBot.sendMessage(
             chatId,
             'Sorry, I had trouble processing that image.',
@@ -5526,11 +5654,15 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
         const arg = parts.slice(1).join(' ');
 
         if (command === '/start') {
-          const startMsg = "Hi! I'm Charlize. Send me a message and I'll help you out. Use /help for commands.";
+          const startMsg =
+            "Hi! I'm Charlize. Send me a message and I'll help you out. Use /help for commands.";
           await telegramBot.sendMessage(chatId, startMsg, {
             reply_to_message_id: msg.message_id,
           });
-          logToFile('telegram-out', 'info', startMsg, { chatId, command: '/start' });
+          logToFile('telegram-out', 'info', startMsg, {
+            chatId,
+            command: '/start',
+          });
           console.log(`\x1b[32m  -> /start sent\x1b[0m\n`);
         } else if (command === '/help') {
           const helpMsg = `*Charlize AI Assistant Commands*
@@ -5552,7 +5684,10 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
             reply_to_message_id: msg.message_id,
             parse_mode: 'Markdown',
           });
-          logToFile('telegram-out', 'info', '/help response', { chatId, command: '/help' });
+          logToFile('telegram-out', 'info', '/help response', {
+            chatId,
+            command: '/help',
+          });
           console.log(`\x1b[32m  -> /help sent\x1b[0m\n`);
         } else if (command === '/track') {
           await telegramBot.sendMessage(
@@ -5589,7 +5724,11 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
               await telegramBot.sendMessage(chatId, 'No results found.', {
                 reply_to_message_id: msg.message_id,
               });
-              logToFile('telegram-out', 'info', 'No results found', { chatId, command: '/search', query: arg });
+              logToFile('telegram-out', 'info', 'No results found', {
+                chatId,
+                command: '/search',
+                query: arg,
+              });
             } else {
               const response = results
                 .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
@@ -5602,7 +5741,12 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
                   parse_mode: 'Markdown',
                 },
               );
-              logToFile('telegram-out', 'info', `Search results: ${results.length} found`, { chatId, command: '/search', query: arg });
+              logToFile(
+                'telegram-out',
+                'info',
+                `Search results: ${results.length} found`,
+                { chatId, command: '/search', query: arg },
+              );
             }
           }
           console.log(`\x1b[32m  -> /search processed\x1b[0m\n`);
@@ -5704,14 +5848,19 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
         console.log(`\x1b[32m  -> Response sent\x1b[0m\n`);
       } catch (error) {
         console.error(`\x1b[31m  -> Error: ${error.message}\x1b[0m\n`);
-        logToFile('telegram-error', 'error', error.message, { chatId, context: 'main-response' });
+        logToFile('telegram-error', 'error', error.message, {
+          chatId,
+          context: 'main-response',
+        });
         await telegramBot.sendMessage(chatId, 'Sorry, something went wrong.');
       }
     });
 
     telegramBot.on('error', (err) => {
       console.error(`\x1b[31m[Telegram error: ${err.message}]\x1b[0m\n`);
-      logToFile('telegram-error', 'error', err.message, { context: 'bot-error' });
+      logToFile('telegram-error', 'error', err.message, {
+        context: 'bot-error',
+      });
     });
 
     // Rate-limit polling error logs to avoid spam
@@ -5723,11 +5872,16 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
       // Only log once per 30 seconds to avoid spam
       if (now - lastPollingError > 30000) {
         if (pollingErrorCount > 1) {
-          console.error(`\x1b[31m[Polling error (${pollingErrorCount}x): ${err.message}]\x1b[0m\n`);
+          console.error(
+            `\x1b[31m[Polling error (${pollingErrorCount}x): ${err.message}]\x1b[0m\n`,
+          );
         } else {
           console.error(`\x1b[31m[Polling error: ${err.message}]\x1b[0m\n`);
         }
-        logToFile('telegram-error', 'error', err.message, { context: 'polling-error', count: pollingErrorCount });
+        logToFile('telegram-error', 'error', err.message, {
+          context: 'polling-error',
+          count: pollingErrorCount,
+        });
         lastPollingError = now;
         pollingErrorCount = 0;
       }
@@ -5778,16 +5932,22 @@ function watchTelegramConfig() {
     const isEnabled = config.telegram?.enabled && tokenToUse;
 
     if (isEnabled && (!telegramBot || currentTelegramToken !== tokenToUse)) {
-      console.log('\x1b[33m  [Telegram: config changed, updating bot...]\x1b[0m\n');
+      console.log(
+        '\x1b[33m  [Telegram: config changed, updating bot...]\x1b[0m\n',
+      );
       await startTelegramBot();
     } else if (!isEnabled && telegramBot) {
-      console.log('\x1b[33m  [Telegram: disabled in config, stopping bot...]\x1b[0m\n');
+      console.log(
+        '\x1b[33m  [Telegram: disabled in config, stopping bot...]\x1b[0m\n',
+      );
       try {
         telegramBot.stopPolling();
         telegramBot = null;
         currentTelegramToken = null;
       } catch (e) {
-        console.log(`\x1b[90m  [Telegram: error stopping bot: ${e.message}]\x1b[0m\n`);
+        console.log(
+          `\x1b[90m  [Telegram: error stopping bot: ${e.message}]\x1b[0m\n`,
+        );
       }
     }
   }, 5000); // Check every 5 seconds
@@ -5795,6 +5955,9 @@ function watchTelegramConfig() {
 
 // Main
 async function main() {
+  // Initialize chat handler
+  await initChatHandler();
+
   // Start Telegram bot
   await startTelegramBot();
 
