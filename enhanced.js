@@ -155,7 +155,9 @@ const INTENT_PATTERNS = {
     /track (my |the )?(calories|food|meal|workout|exercise|sleep|habit)/i,
     /i (just )?(had|ate|drank|consumed)/i,
     /how many (calories|cals)/i,
-    /what'?ve i eaten/i, /what did i eat/i,
+    /what'?ve i (eaten|drank|drunk|had)/i,
+    /what did i (eat|drink|have|consume)/i,
+    /what have i (eaten|drank|drunk|had|consumed)/i,
     /show (me )?(my )?(calories|food|meal|workout) (stats|today|history)/i,
     /add (a )?(meal|food|workout|exercise)/i,
     /record (my |a )?(calories|food|meal|workout|exercise)/i,
@@ -523,24 +525,10 @@ Or use direct mode:
 }
 
 // ---------- Tracking ----------
-async function handleTrackRequest(input) {
-  const lower = input.toLowerCase();
-  const store = new TrackerStore();
-  const trackers = store.listTrackers();
-
-  // Query patterns - don't auto-log questions
-  if (/how many|what'?ve i|what did i|show me|stats/i.test(lower)) {
-    if (trackers.length === 0) {
-      return "No trackers configured yet. Create one with: /track new";
-    }
-    return await handleTrackQuery(input, lower, store, trackers);
-  }
-
-  // If no trackers exist, try LLM-based auto-detection and creation
-  if (trackers.length === 0) {
-    try {
-      // Use LLM to detect if this contains trackable data
-      const detectionPrompt = `Analyze this user statement and determine if it contains data that should be tracked (like food, exercise, sleep, habits, mood, water intake, medication, etc.):
+// Helper function to detect tracker type and auto-create if needed
+async function detectAndCreateTracker(input, store) {
+  try {
+    const detectionPrompt = `Analyze this user statement and determine if it contains data that should be tracked (like food, exercise, sleep, habits, mood, water intake, medication, etc.):
 
 "${input}"
 
@@ -558,48 +546,82 @@ Examples:
 - "Slept 7 hours last night" -> {trackable: true, trackerType: "sleep", description: "sleep tracker", confidence: 0.9}
 - "What's the weather?" -> {trackable: false, confidence: 0.0}`;
 
-      const model = getDefaultModel();
-      const detectionResponse = await chatCompletion(model, [
-        { role: 'system', content: 'You are a data classifier. Output only valid JSON.' },
-        { role: 'user', content: detectionPrompt }
-      ]);
+    const model = getDefaultModel();
+    const detectionResponse = await chatCompletion(model, [
+      { role: 'system', content: 'You are a data classifier. Output only valid JSON.' },
+      { role: 'user', content: detectionPrompt }
+    ]);
 
-      const detectionContent = detectionResponse.message;
-      const detection = JSON.parse(detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+    const detectionContent = detectionResponse.message;
+    const detection = JSON.parse(detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
 
-      // If not trackable or low confidence, return helpful message
-      if (!detection.trackable || detection.confidence < 0.6) {
-        return "No trackers configured. Create one with: /track new";
-      }
+    // If not trackable or low confidence, return null
+    if (!detection.trackable || detection.confidence < 0.6) {
+      return null;
+    }
 
-      // Auto-create the tracker
-      console.log(`  \x1b[36m[Auto-creating ${detection.trackerType} tracker...]\x1b[0m`);
+    // Check if a tracker of this type already exists
+    const trackers = store.listTrackers();
+    const existingTracker = trackers.find(t =>
+      t.type === detection.trackerType ||
+      (detection.trackerType === 'nutrition' && (t.type === 'food' || t.type === 'nutrition'))
+    );
 
-      const trackerConfig = await parseTrackerFromNaturalLanguage(detection.description);
-      if (!trackerConfig) {
-        return "I detected trackable data but couldn't create a tracker. Try: /track new";
-      }
+    if (existingTracker) {
+      return existingTracker;
+    }
 
-      // Create the tracker
-      const createResult = store.createTracker(trackerConfig);
-      if (!createResult.success) {
-        return `Failed to create tracker: ${createResult.error}`;
-      }
+    // Auto-create the tracker
+    console.log(`  \x1b[36m[Auto-creating ${detection.trackerType} tracker...]\x1b[0m`);
 
-      console.log(`  \x1b[32m[Created tracker: @${trackerConfig.name}]\x1b[0m`);
+    const trackerConfig = await parseTrackerFromNaturalLanguage(detection.description);
+    if (!trackerConfig) {
+      return null;
+    }
 
-      // Log the data to the new tracker
-      const logResult = await logToTracker(trackerConfig, input, store);
-      if (logResult.success) {
-        return `\x1b[32m[New tracker created!]\x1b[0m\n\n${logResult.message}`;
-      }
+    // Create the tracker
+    const createResult = store.createTracker(trackerConfig);
+    if (!createResult.success) {
+      console.error(`[Track] Failed to create tracker: ${createResult.error}`);
+      return null;
+    }
 
-      return `Tracker created: **${trackerConfig.displayName}** (@${trackerConfig.name})\n\nBut I couldn't parse your data. Try again with more details.`;
+    console.log(`  \x1b[32m[Created tracker: @${trackerConfig.name}]\x1b[0m`);
+    return trackerConfig;
 
-    } catch (e) {
-      console.error('[Track] Auto-creation failed:', e.message);
+  } catch (e) {
+    console.error('[Track] Detection/creation failed:', e.message);
+    return null;
+  }
+}
+
+async function handleTrackRequest(input) {
+  const lower = input.toLowerCase();
+  const store = new TrackerStore();
+  const trackers = store.listTrackers();
+
+  // Query patterns - don't auto-log questions
+  if (/how many|what'?ve i|what did i|show me|stats/i.test(lower)) {
+    if (trackers.length === 0) {
+      return "No trackers configured yet. Create one with: /track new";
+    }
+    return await handleTrackQuery(input, lower, store, trackers);
+  }
+
+  // If no trackers exist, try LLM-based auto-detection and creation
+  if (trackers.length === 0) {
+    const tracker = await detectAndCreateTracker(input, store);
+    if (!tracker) {
       return "No trackers configured. Create one with: /track new";
     }
+
+    // Log the data to the tracker
+    const logResult = await logToTracker(tracker, input, store);
+    if (logResult.success) {
+      return `\x1b[32m[New tracker created!]\x1b[0m\n\n${logResult.message}`;
+    }
+
+    return `Tracker created: **${tracker.displayName}** (@${tracker.name})\n\nBut I couldn't parse your data. Try again with more details.`;
   }
 
   // Check for explicit tracker specification: "log to <tracker>" or "add to <tracker>"
@@ -652,6 +674,14 @@ Examples:
           return result.message;
         }
       }
+      // No food tracker exists - try to auto-create
+      const tracker = await detectAndCreateTracker(input, store);
+      if (tracker) {
+        const result = await logToTracker(tracker, input, store);
+        if (result.success) {
+          return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
+        }
+      }
     }
 
     if (isWorkout) {
@@ -660,6 +690,14 @@ Examples:
         const result = await logToTracker(workoutTracker, input, store);
         if (result.success) {
           return result.message;
+        }
+      }
+      // No workout tracker exists - try to auto-create
+      const tracker = await detectAndCreateTracker(input, store);
+      if (tracker) {
+        const result = await logToTracker(tracker, input, store);
+        if (result.success) {
+          return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
         }
       }
     }
@@ -683,10 +721,28 @@ Examples:
         return result.message;
       }
     }
+    // No workout tracker exists but workout keywords detected - try to auto-create
+    const tracker = await detectAndCreateTracker(input, store);
+    if (tracker) {
+      const result = await logToTracker(tracker, input, store);
+      if (result.success) {
+        return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
+      }
+    }
   }
 
-  // If there's only one tracker, try logging to it
+  // Smart fallback: if there's only one tracker, use LLM to check if this is appropriate for it
   if (trackers.length === 1) {
+    // Try LLM detection to see if we need a different tracker type
+    const detectedTracker = await detectAndCreateTracker(input, store);
+    if (detectedTracker && detectedTracker.name !== trackers[0].name) {
+      // A new tracker was created for a different type
+      const result = await logToTracker(detectedTracker, input, store);
+      if (result.success) {
+        return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
+      }
+    }
+    // Either detection failed or returned the existing tracker - use existing
     const result = await logToTracker(trackers[0], input, store);
     if (result.success) {
       return result.message;
@@ -849,6 +905,34 @@ async function logToTracker(tracker, input, store) {
 
 async function handleTrackQuery(input, lower, store, trackers) {
   const query = new QueryEngine();
+
+  // What did I eat/drink query
+  if (/what (did i|have i|did you|have you) (eat|ate|drink|drank|drunk|have|had|consume|consumed)/i.test(lower)) {
+    const foodTracker = trackers.find(t =>
+      t.type === 'nutrition' ||
+      t.type === 'food' ||
+      t.name.includes('food')
+    );
+
+    if (foodTracker) {
+      const stats = query.getStats(foodTracker.name, 'today');
+
+      if (stats.totalEntries === 0) {
+        return `No food/drink entries logged today for ${foodTracker.displayName}.`;
+      }
+
+      const totalCals = stats.aggregations?.calories?.total || 0;
+      const entries = stats.records.map(r => {
+        const meal = r.data?.name || r.data?.meal || 'Entry';
+        const cal = r.data?.calories ? ` (${r.data.calories} cal)` : '';
+        return `- ${meal}${cal}`;
+      }).join('\n');
+
+      return `**${foodTracker.displayName}** today:\n\n` +
+        entries +
+        `\n\nTotal: ${stats.totalEntries} entries, ${totalCals.toFixed(0)} calories`;
+    }
+  }
 
   // Calories query
   if (/calories|cals/i.test(lower)) {
