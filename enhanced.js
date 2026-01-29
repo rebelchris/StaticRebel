@@ -564,7 +564,7 @@ Examples:
         { role: 'user', content: detectionPrompt }
       ]);
 
-      const detectionContent = detectionResponse.message?.content;
+      const detectionContent = detectionResponse.message;
       const detection = JSON.parse(detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
 
       // If not trackable or low confidence, return helpful message
