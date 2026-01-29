@@ -26,7 +26,7 @@ import { listSubagents, createCodingSubagent, createAnalysisSubagent, sendToSuba
 import { listSkills, getSkillsStats } from './lib/skillsManager.js';
 import { loadPersona, buildSystemPrompt, sendMessage } from './agents/main/agent.js';
 import { runCommand as runCodingCommand, readFile, executeChange } from './agents/coding/agent.js';
-import { TrackerStore, QueryEngine, parseRecordFromText, matchesAutoDetect } from './tracker.js';
+import { TrackerStore, QueryEngine, parseRecordFromText, matchesAutoDetect, parseTrackerFromNaturalLanguage } from './tracker.js';
 
 // Level 2 AI Assistant - New Imports
 import {
@@ -528,13 +528,78 @@ async function handleTrackRequest(input) {
   const store = new TrackerStore();
   const trackers = store.listTrackers();
 
-  if (trackers.length === 0) {
-    return "No trackers configured. Create one with: /track new";
-  }
-
   // Query patterns - don't auto-log questions
   if (/how many|what'?ve i|what did i|show me|stats/i.test(lower)) {
+    if (trackers.length === 0) {
+      return "No trackers configured yet. Create one with: /track new";
+    }
     return await handleTrackQuery(input, lower, store, trackers);
+  }
+
+  // If no trackers exist, try LLM-based auto-detection and creation
+  if (trackers.length === 0) {
+    try {
+      // Use LLM to detect if this contains trackable data
+      const detectionPrompt = `Analyze this user statement and determine if it contains data that should be tracked (like food, exercise, sleep, habits, mood, water intake, medication, etc.):
+
+"${input}"
+
+Respond with ONLY valid JSON:
+{
+  "trackable": true/false,
+  "trackerType": "nutrition|workout|sleep|habit|mood|hydration|medication|custom",
+  "description": "brief description of what tracker this needs",
+  "confidence": 0.0-1.0
+}
+
+Examples:
+- "I had a coffee with 150 calories" -> {trackable: true, trackerType: "nutrition", description: "nutrition tracker for food and drinks", confidence: 0.9}
+- "Just finished a 5k run" -> {trackable: true, trackerType: "workout", description: "workout tracker for exercise", confidence: 0.95}
+- "Slept 7 hours last night" -> {trackable: true, trackerType: "sleep", description: "sleep tracker", confidence: 0.9}
+- "What's the weather?" -> {trackable: false, confidence: 0.0}`;
+
+      const model = getDefaultModel();
+      const detectionResponse = await chatCompletion(model, [
+        { role: 'system', content: 'You are a data classifier. Output only valid JSON.' },
+        { role: 'user', content: detectionPrompt }
+      ]);
+
+      const detectionContent = detectionResponse.message?.content;
+      const detection = JSON.parse(detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+
+      // If not trackable or low confidence, return helpful message
+      if (!detection.trackable || detection.confidence < 0.6) {
+        return "No trackers configured. Create one with: /track new";
+      }
+
+      // Auto-create the tracker
+      console.log(`  \x1b[36m[Auto-creating ${detection.trackerType} tracker...]\x1b[0m`);
+
+      const trackerConfig = await parseTrackerFromNaturalLanguage(detection.description);
+      if (!trackerConfig) {
+        return "I detected trackable data but couldn't create a tracker. Try: /track new";
+      }
+
+      // Create the tracker
+      const createResult = store.createTracker(trackerConfig);
+      if (!createResult.success) {
+        return `Failed to create tracker: ${createResult.error}`;
+      }
+
+      console.log(`  \x1b[32m[Created tracker: @${trackerConfig.name}]\x1b[0m`);
+
+      // Log the data to the new tracker
+      const logResult = await logToTracker(trackerConfig, input, store);
+      if (logResult.success) {
+        return `\x1b[32m[New tracker created!]\x1b[0m\n\n${logResult.message}`;
+      }
+
+      return `Tracker created: **${trackerConfig.displayName}** (@${trackerConfig.name})\n\nBut I couldn't parse your data. Try again with more details.`;
+
+    } catch (e) {
+      console.error('[Track] Auto-creation failed:', e.message);
+      return "No trackers configured. Create one with: /track new";
+    }
   }
 
   // Check for explicit tracker specification: "log to <tracker>" or "add to <tracker>"
