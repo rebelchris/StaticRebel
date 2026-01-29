@@ -18,31 +18,109 @@ import http from 'http';
 import https from 'https';
 import { spawn } from 'child_process';
 import { loadConfig } from './lib/configManager.js';
-import { initMemory, getMemoryStats, readDailyMemory, readLongTermMemory, getRecentDailyMemories, writeDailyMemory, curateMemory } from './lib/memoryManager.js';
-import { listAvailableModels, getModelForTask, chatCompletion, getDefaultModel, checkOllamaConnection } from './lib/modelRegistry.js';
-import { startScheduler, listCronJobs, addCronJob, describeCron, getNextRunTime, getSchedulerStatus, deleteCronJob, toggleCronJob } from './lib/cronScheduler.js';
-import { startHeartbeatMonitor, getHeartbeatStatus, configureHeartbeat } from './lib/heartbeatManager.js';
-import { listSubagents, createCodingSubagent, createAnalysisSubagent, sendToSubagent, getSubagentStats, terminateSubagent } from './lib/subagentManager.js';
+import {
+  initMemory,
+  getMemoryStats,
+  readDailyMemory,
+  readLongTermMemory,
+  getRecentDailyMemories,
+  writeDailyMemory,
+  curateMemory,
+} from './lib/memoryManager.js';
+import {
+  listAvailableModels,
+  getModelForTask,
+  chatCompletion,
+  getDefaultModel,
+  checkOllamaConnection,
+} from './lib/modelRegistry.js';
+import {
+  startScheduler,
+  listCronJobs,
+  addCronJob,
+  describeCron,
+  getNextRunTime,
+  getSchedulerStatus,
+  deleteCronJob,
+  toggleCronJob,
+} from './lib/cronScheduler.js';
+import {
+  startHeartbeatMonitor,
+  getHeartbeatStatus,
+  configureHeartbeat,
+} from './lib/heartbeatManager.js';
+import {
+  listSubagents,
+  createCodingSubagent,
+  createAnalysisSubagent,
+  sendToSubagent,
+  getSubagentStats,
+  terminateSubagent,
+} from './lib/subagentManager.js';
 import { listSkills, getSkillsStats } from './lib/skillsManager.js';
-import { loadPersona, buildSystemPrompt, sendMessage } from './agents/main/agent.js';
-import { runCommand as runCodingCommand, readFile, executeChange } from './agents/coding/agent.js';
-import { TrackerStore, QueryEngine, parseRecordFromText, matchesAutoDetect, parseTrackerFromNaturalLanguage } from './tracker.js';
+import {
+  loadPersona,
+  buildSystemPrompt,
+  sendMessage,
+} from './agents/main/agent.js';
+import {
+  runCommand as runCodingCommand,
+  readFile,
+  executeChange,
+} from './agents/coding/agent.js';
+import {
+  TrackerStore,
+  QueryEngine,
+  parseRecordFromText,
+  matchesAutoDetect,
+  parseTrackerFromNaturalLanguage,
+} from './tracker.js';
 
 // Level 2 AI Assistant - New Imports
 import {
-  initPersonaSystem, getSystemPrompt, modifyPersonaFeedback, getAvailablePersonas,
-  setActivePersona, createPersona, analyzeForImprovements
+  initPersonaSystem,
+  getSystemPrompt,
+  modifyPersonaFeedback,
+  getAvailablePersonas,
+  setActivePersona,
+  createPersona,
+  analyzeForImprovements,
 } from './lib/personaManager.js';
-import { initVectorMemory, addMemory, searchMemories, getMemoryStats as getVectorStats, rememberPreference } from './lib/vectorMemory.js';
 import {
-  initWorkerSystem, createTask, getAllTasks, getWorkerStats, generateTodoMd,
-  TaskStatus
+  initVectorMemory,
+  addMemory,
+  searchMemories,
+  getMemoryStats as getVectorStats,
+  rememberPreference,
+} from './lib/vectorMemory.js';
+import {
+  initWorkerSystem,
+  createTask,
+  getAllTasks,
+  getWorkerStats,
+  generateTodoMd,
+  TaskStatus,
 } from './lib/workerManager.js';
 import {
-  initApiConnector, createConnector, getAllConnectors, getApiStats, storeApiKey
+  initApiConnector,
+  createConnector,
+  getAllConnectors,
+  getApiStats,
+  storeApiKey,
 } from './lib/apiConnector.js';
-import { routeTask, orchestrate, streamOllama, runClaudeCode } from './orchestrator.js';
+import {
+  routeTask,
+  orchestrate,
+  streamOllama,
+  runClaudeCode,
+} from './orchestrator.js';
 import { research, webResearch, streamResearch } from './lib/webOracle.js';
+import { classifyIntent } from './lib/intentClassifier.js';
+import {
+  initActionRegistry,
+  executeAction,
+  getAllActions,
+} from './lib/actionRegistry.js';
 
 const PROFILE_FILE = path.join(os.homedir(), '.static-rebel-profile.md');
 
@@ -60,7 +138,9 @@ async function startDashboard() {
     return dashboard;
   } catch (error) {
     console.error('Failed to start dashboard:', error.message);
-    console.log('\nTo use the dashboard, please install dashboard dependencies:');
+    console.log(
+      '\nTo use the dashboard, please install dashboard dependencies:',
+    );
     console.log('  cd dashboard && npm install\n');
     process.exit(1);
   }
@@ -73,52 +153,92 @@ async function startDashboard() {
 const INTENT_PATTERNS = {
   // Scheduling
   schedule: [
-    /remind me/i, /schedule/i, /set (a )?reminder/i, /set an alarm/i,
-    /every day at/i, /every week/i, /on (monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
-    /at \d{1,2}(:\d{2})?( ?(am|pm))?/i, /cron/i,
-    /create (a )?scheduled (task|job)/i, /add (a )?task/i
+    /remind me/i,
+    /schedule/i,
+    /set (a )?reminder/i,
+    /set an alarm/i,
+    /every day at/i,
+    /every week/i,
+    /on (monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+    /at \d{1,2}(:\d{2})?( ?(am|pm))?/i,
+    /cron/i,
+    /create (a )?scheduled (task|job)/i,
+    /add (a )?task/i,
   ],
 
   // Subagents / Delegation
   coding: [
-    /write (some )?(code|function|class|script)/i, /create (a )?(function|class|module|component|api)/i,
-    /build (a )?/i, /implement/i, /code/i, /debug/i, /fix (the )?(bug|error)/i,
-    /refactor/i, /review (my )?code/i, /program/i, /develop/i
+    /write (some )?(code|function|class|script)/i,
+    /create (a )?(function|class|module|component|api)/i,
+    /build (a )?/i,
+    /implement/i,
+    /code/i,
+    /debug/i,
+    /fix (the )?(bug|error)/i,
+    /refactor/i,
+    /review (my )?code/i,
+    /program/i,
+    /develop/i,
   ],
   analysis: [
-    /analyze/i, /compare/i, /evaluate/i, /assess/i, /think about/i,
-    /what do you think/i, /should i/i, /pros and cons/i,
-    /look into/i, /investigate/i, /figure out/i
+    /analyze/i,
+    /compare/i,
+    /evaluate/i,
+    /assess/i,
+    /think about/i,
+    /what do you think/i,
+    /should i/i,
+    /pros and cons/i,
+    /look into/i,
+    /investigate/i,
+    /figure out/i,
   ],
 
   // Memory
   memory: [
-    /what did we (talk about|discuss|cover)/i, /remember (anything|that)/i,
-    /my (memory|stats|history)/i, /show (me )?(my )?memories/i,
-    /long.?term memory/i, /curate/i, /forget/i
+    /what did we (talk about|discuss|cover)/i,
+    /remember (anything|that)/i,
+    /my (memory|stats|history)/i,
+    /show (me )?(my )?memories/i,
+    /long.?term memory/i,
+    /curate/i,
+    /forget/i,
   ],
 
   // Heartbeat / Status
   status: [
-    /how are you/i, /what'?s (your|the) status/i, /system status/i,
-    /heartbeat/i, /check (on|up) (everything|me)/i
+    /how are you/i,
+    /what'?s (your|the) status/i,
+    /system status/i,
+    /heartbeat/i,
+    /check (on|up) (everything|me)/i,
   ],
 
   // Task Management
   tasks: [
-    /scheduled tasks/i, /upcoming tasks/i, /what (do i have|are) (scheduled|planned)/i,
-    /show (me )?(my )?(tasks|schedule|reminders)/i, /cancel (a )?task/i
+    /scheduled tasks/i,
+    /upcoming tasks/i,
+    /what (do i have|are) (scheduled|planned)/i,
+    /show (me )?(my )?(tasks|schedule|reminders)/i,
+    /cancel (a )?task/i,
   ],
 
   // Models
   models: [
-    /what models/i, /list models/i, /available models/i, /change (the )?model/i,
-    /switch model/i, /use (a )?different model/i
+    /what models/i,
+    /list models/i,
+    /available models/i,
+    /change (the )?model/i,
+    /switch model/i,
+    /use (a )?different model/i,
   ],
 
   // Skills
   skills: [
-    /what skills/i, /list skills/i, /installed skills/i, /add (a )?skill/i
+    /what skills/i,
+    /list skills/i,
+    /installed skills/i,
+    /add (a )?skill/i,
   ],
 
   // Web Search - Only for clearly current-info requests
@@ -128,26 +248,27 @@ const INTENT_PATTERNS = {
     /latest news\??$/i,
     /what is happening\??$/i,
     /current events\??$/i,
-    /search (for |the )(web|internet)/i
+    /search (for |the )(web|internet)/i,
   ],
 
   // Web Oracle - Deep research queries
   research: [
-    /research/i, /look into/i, /investigate/i,
-    /find out about/i, /tell me about (the )?(latest|new)/i,
-    /what'?s the (latest|new) on/i, /hot topic/i,
-    /trending/i, /current state of/i
+    /research/i,
+    /look into/i,
+    /investigate/i,
+    /find out about/i,
+    /tell me about (the )?(latest|new)/i,
+    /what'?s the (latest|new) on/i,
+    /hot topic/i,
+    /trending/i,
+    /current state of/i,
   ],
 
   // Shell Commands
-  run: [
-    /run (a )?(command|shell)/i, /execute/i, /terminal/i, /bash/i
-  ],
+  run: [/run (a )?(command|shell)/i, /execute/i, /terminal/i, /bash/i],
 
   // Help
-  help: [
-    /help/i, /what can you do/i, /what commands/i, /how (does this|to)/i
-  ],
+  help: [/help/i, /what can you do/i, /what commands/i, /how (does this|to)/i],
 
   // Tracking / Logging
   track: [
@@ -162,54 +283,94 @@ const INTENT_PATTERNS = {
     /add (a )?(meal|food|workout|exercise)/i,
     /record (my |a )?(calories|food|meal|workout|exercise)/i,
     /logging/i,
-    /just logged/i
+    /just logged/i,
+    // Direct tracking requests
+    /can you (track|log|record) (this|that|it)/i,
+    /track (this|that|it)( for me)?/i,
+    /keep (a )?track of/i,
+    /note (this|that) down/i,
+    // Workout/run specific patterns
+    /i (\w+ )?(had|did|went for|completed|finished) (a |an |my )?(\d+k?m?|5k|10k|half.?marathon)?\s*(run|walk|swim|bike|workout|jog|ride)/i,
+    /went (for a |)(run|jog|walk|swim|ride|bike)/i,
+    /(run|ran|walked|swam|biked|cycled|jogged) (a |for )?\d+/i,
+    /zone \d+ (pace|run|workout|training|effort)/i,
+    /\d+k\s*(run|walk|jog)/i,
+    // General activity patterns
+    /today.*(run|walk|swim|bike|workout|jog|ride)/i,
+    /(run|walk|swim|bike|workout|jog|ride).*today/i,
   ],
 
   // Level 2: Persona & Identity
   persona: [
-    /change (your )?persona/i, /switch (your )?persona/i, /use (a )?different (persona|personality)/i,
+    /change (your )?persona/i,
+    /switch (your )?persona/i,
+    /use (a )?different (persona|personality)/i,
     /be more (concise|detailed|friendly|technical)/i,
     /adjust (your )?(tone|style|personality)/i,
-    /persona/i
+    /persona/i,
   ],
 
   // Level 2: Vector Memory & Semantic Search
   memory2: [
-    /remember (this|that|information)/i, /store (this|that)/i,
-    /search (my )?memories/i, /semantic search/i,
-    /long.?term memory/i, /recall (something|anything)/i,
-    /vector memory/i, /semantic/i
+    /remember (this|that|information)/i,
+    /store (this|that)/i,
+    /search (my )?memories/i,
+    /semantic search/i,
+    /long.?term memory/i,
+    /recall (something|anything)/i,
+    /vector memory/i,
+    /semantic/i,
   ],
 
   // Level 2: Background Workers & Projects
   worker: [
-    /run (in |a )?background/i, /long(-|\s)?running task/i,
-    /create (a )?project/i, /project management/i,
-    /background task/i, /async task/i, /subtask/i,
-    /todo\.md/i, /task queue/i
+    /run (in |a )?background/i,
+    /long(-|\s)?running task/i,
+    /create (a )?project/i,
+    /project management/i,
+    /background task/i,
+    /async task/i,
+    /subtask/i,
+    /todo\.md/i,
+    /task queue/i,
   ],
 
   // Level 2: API Connectors
   api: [
-    /connect (to |an )?api/i, /api (connector|integration)/i,
-    /new (api|integration)/i, /store (api|api key)/i,
-    /dynamic (api|connector)/i, /webhook/i
+    /connect (to |an )?api/i,
+    /api (connector|integration)/i,
+    /new (api|integration)/i,
+    /store (api|api key)/i,
+    /dynamic (api|connector)/i,
+    /webhook/i,
   ],
 
   // Level 3: Orchestrator (Claude Code CLI + Streaming)
   orchestrator: [
-    /use claude code/i, /spawn claude/i, /run claude cli/i,
-    /orchestrate/i, /dual stream/i, /streaming response/i,
-    /complex coding/i, /deep refactor/i, /full codebase/i,
-    /claude.*task/i, /advanced debugging/i, /architecture review/i
-  ]
+    /use claude code/i,
+    /spawn claude/i,
+    /run claude cli/i,
+    /orchestrate/i,
+    /dual stream/i,
+    /streaming response/i,
+    /complex coding/i,
+    /deep refactor/i,
+    /full codebase/i,
+    /claude.*task/i,
+    /advanced debugging/i,
+    /architecture review/i,
+  ],
 };
 
 function detectIntent(text) {
   const lower = text.toLowerCase();
 
   // Check for scheduling intent first (only with explicit scheduling keywords)
-  if (/remind me|set (a |an )?reminder|schedule|create (a )?scheduled|cron|every (day|week|hour|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(lower)) {
+  if (
+    /remind me|set (a |an )?reminder|schedule|create (a )?scheduled|cron|every (day|week|hour|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(
+      lower,
+    )
+  ) {
     return { type: 'schedule', original: text };
   }
 
@@ -231,59 +392,125 @@ function detectIntent(text) {
 // ============================================================================
 
 async function handleNaturalLanguage(input) {
-  const intent = detectIntent(input);
-  const lower = input.toLowerCase();
+  // 1. Classify intent using LLM
+  const classification = await classifyIntent(input, getAllActions());
 
-  switch (intent.type) {
-    case 'schedule':
-      return await handleScheduleRequest(input);
-    case 'coding':
-      return await handleCodingRequest(input);
-    case 'analysis':
-      return await handleAnalysisRequest(input);
-    case 'memory':
-      return await handleMemoryRequest(input);
-    case 'status':
-      return await handleStatusRequest();
-    case 'tasks':
-      return await handleTasksRequest();
-    case 'models':
-      return await handleModelsRequest();
-    case 'skills':
-      return await handleSkillsRequest();
-    case 'search':
-      return await handleWebSearch(input);
-    case 'research':
-      return await handleResearchRequest(input);
-    case 'run':
-      return await handleRunRequest(input);
-    case 'track':
-      return await handleTrackRequest(input);
-    // Level 2 Handlers
-    case 'persona':
-      return handlePersonaRequest(input);
-    case 'memory2':
-      return await handleMemory2Request(input);
-    case 'worker':
-      return await handleWorkerRequest(input);
-    case 'api':
-      return handleApiRequest(input);
-    // Level 3: Orchestrator
-    case 'orchestrator':
-      return await handleOrchestratorRequest(input);
-    case 'help':
-      return handleHelp();
-    default:
-      return null; // Let regular chat handle it
+  // 2. Check if should fallback to chat
+  if (
+    classification.fallbackToChat ||
+    classification.intents.length === 0 ||
+    classification.intents[0].confidence < 0.6
+  ) {
+    return null; // Let regular chat handle it
   }
+
+  // 3. Execute action(s)
+  const context = buildActionContext();
+  const results = [];
+
+  for (const intent of classification.intents) {
+    if (intent.confidence >= 0.6) {
+      const result = await executeAction(intent.actionName, input, context);
+      if (result.success) {
+        results.push(result.result);
+      } else {
+        console.error(`[Action Error] ${intent.actionName}:`, result.error);
+        results.push(`Sorry, something went wrong with ${intent.actionName}.`);
+      }
+    }
+  }
+
+  // 4. Return combined results
+  return results.length > 0 ? results.join('\n\n---\n\n') : null;
+}
+
+function buildActionContext() {
+  return {
+    modules: {
+      // Simple functions
+      listAvailableModels,
+      getDefaultModel,
+      getModelForTask,
+      listSkills,
+      getSkillsStats,
+      getSubagentStats,
+      getMemoryStats,
+      getSchedulerStatus,
+      getHeartbeatStatus,
+
+      // Module groups
+      cronScheduler: {
+        listCronJobs,
+        addCronJob,
+        describeCron,
+        getNextRunTime,
+        deleteCronJob,
+        toggleCronJob,
+      },
+      memoryManager: {
+        readDailyMemory,
+        readLongTermMemory,
+        getRecentDailyMemories,
+        curateMemory,
+        getMemoryStats,
+      },
+      personaManager: {
+        getAvailablePersonas,
+        setActivePersona,
+        modifyPersonaFeedback,
+        getSystemPrompt,
+      },
+      tracker: {
+        TrackerStore,
+        QueryEngine,
+        parseRecordFromText,
+        parseTrackerFromNaturalLanguage,
+      },
+      vectorMemory: {
+        addMemory,
+        searchMemories,
+        getMemoryStats: getVectorStats,
+        rememberPreference,
+      },
+      workerManager: {
+        createTask,
+        getAllTasks,
+        generateTodoMd,
+        getWorkerStats,
+      },
+      apiConnector: {
+        createConnector,
+        getAllConnectors,
+        storeApiKey,
+        getApiStats,
+      },
+      orchestrator: { routeTask, streamOllama, runClaudeCode },
+      research: { research, webResearch },
+      subagents: {
+        createCodingSubagent,
+        createAnalysisSubagent,
+        sendToSubagent,
+      },
+      modelRegistry: { getDefaultModel, chatCompletion },
+    },
+    user: {},
+    conversation: {},
+  };
 }
 
 // ---------- Schedule Handler ----------
 async function handleScheduleRequest(input) {
   // Extract time pattern
   const timeMatch = input.match(/(\d{1,2})(:(\d{2}))?( ?(am|pm))?/i);
-  const daysMatch = input.match(/(every |on )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i);
-  const taskMatch = input.replace(/remind me to?|schedule|every|at \d{1,2}(:\d{2})?( ?(am|pm))?/gi, '').trim();
+  const daysMatch = input.match(
+    /(every |on )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+  );
+  const taskMatch = input
+    .replace(
+      /remind me to?|schedule|every|at \d{1,2}(:\d{2})?( ?(am|pm))?/gi,
+      '',
+    )
+    .trim();
 
   let cronExpr = '* * * * *';
 
@@ -300,7 +527,15 @@ async function handleScheduleRequest(input) {
   }
 
   // Parse days
-  const dayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+  const dayMap = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+  };
   if (daysMatch) {
     const day = dayMap[daysMatch[2].toLowerCase()];
     cronExpr = cronExpr.replace('* *', `* ${day}`);
@@ -312,7 +547,7 @@ async function handleScheduleRequest(input) {
   const job = addCronJob({
     name: taskName,
     schedule: { expr: cronExpr },
-    payload: { text: input }
+    payload: { text: input },
   });
 
   const nextRun = getNextRunTime(job);
@@ -343,19 +578,23 @@ async function handleMemoryRequest(input) {
 
   if (/stats/i.test(lower)) {
     const memStats = getMemoryStats();
-    return `Here's your memory overview:\n\n` +
+    return (
+      `Here's your memory overview:\n\n` +
       `- Daily files: ${memStats.dailyFiles}\n` +
       `- Oldest memory: ${memStats.oldestMemory || 'None'}\n` +
       `- Newest memory: ${memStats.newestMemory || 'None'}\n` +
-      `- Storage used: ${((memStats.dailySize + memStats.longTermSize) / 1024).toFixed(1)} KB`;
+      `- Storage used: ${((memStats.dailySize + memStats.longTermSize) / 1024).toFixed(1)} KB`
+    );
   }
 
   if (/what did we (talk about|discuss)/i.test(lower)) {
     const recent = getRecentDailyMemories(3);
     if (recent.length === 0) return "We haven't created any memories yet.";
 
-    return "Here's what we've been discussing:\n\n" +
-      recent.map(r => `## ${r.date}\n${r.content}`).join('\n\n---\n\n');
+    return (
+      "Here's what we've been discussing:\n\n" +
+      recent.map((r) => `## ${r.date}\n${r.content}`).join('\n\n---\n\n')
+    );
   }
 
   if (/curate/i.test(lower)) {
@@ -365,12 +604,12 @@ async function handleMemoryRequest(input) {
 
   if (/long.?term/i.test(lower)) {
     const longTerm = readLongTermMemory();
-    return longTerm || "No long-term memories yet.";
+    return longTerm || 'No long-term memories yet.';
   }
 
   // Default: show today's memory
   const today = readDailyMemory();
-  return today || "No memories for today yet.";
+  return today || 'No memories for today yet.';
 }
 
 // ---------- Status Handler ----------
@@ -380,28 +619,34 @@ async function handleStatusRequest() {
   const heartbeatStatus = getHeartbeatStatus();
   const subagentStats = getSubagentStats();
 
-  return `Here's my status:\n\n` +
+  return (
+    `Here's my status:\n\n` +
     `**Heartbeat**: ${heartbeatStatus.running ? 'Monitoring' : 'Stopped'}\n` +
     `**Scheduler**: ${schedulerStatus.enabledCount} active tasks\n` +
     `**Subagents**: ${subagentStats.active} active\n` +
     `**Memory**: ${memStats.dailyFiles} daily files\n\n` +
-    `Everything's running smoothly!`;
+    `Everything's running smoothly!`
+  );
 }
 
 // ---------- Tasks Handler ----------
 async function handleTasksRequest() {
   const jobs = listCronJobs();
-  const enabled = jobs.filter(j => j.enabled);
+  const enabled = jobs.filter((j) => j.enabled);
 
   if (enabled.length === 0) {
-    return "You don't have any scheduled tasks yet. Say something like \"Remind me to stretch every hour\" and I'll set it up!";
+    return 'You don\'t have any scheduled tasks yet. Say something like "Remind me to stretch every hour" and I\'ll set it up!';
   }
 
-  return `Here are your scheduled tasks (${enabled.length}):\n\n` +
-    enabled.map(job => {
-      const next = getNextRunTime(job);
-      return `- **${job.name}**\n  ${describeCron(job.schedule.expr)}\n  Next: ${next?.toLocaleString() || 'Unknown'}`;
-    }).join('\n\n');
+  return (
+    `Here are your scheduled tasks (${enabled.length}):\n\n` +
+    enabled
+      .map((job) => {
+        const next = getNextRunTime(job);
+        return `- **${job.name}**\n  ${describeCron(job.schedule.expr)}\n  Next: ${next?.toLocaleString() || 'Unknown'}`;
+      })
+      .join('\n\n')
+  );
 }
 
 // ---------- Models Handler ----------
@@ -410,15 +655,19 @@ async function handleModelsRequest() {
   const current = getDefaultModel();
 
   if (models.length === 0) {
-    return "No models detected. Make sure Ollama is running with `ollama serve`.";
+    return 'No models detected. Make sure Ollama is running with `ollama serve`.';
   }
 
-  return `Available models on your Ollama:\n\n` +
-    models.map(m => {
-      const size = m.size ? (m.size / 1024 / 1024 / 1024).toFixed(1) : '?';
-      return `- ${m.name} (${size} GB)`;
-    }).join('\n') +
-    `\n\nCurrent default: ${current}`;
+  return (
+    `Available models on your Ollama:\n\n` +
+    models
+      .map((m) => {
+        const size = m.size ? (m.size / 1024 / 1024 / 1024).toFixed(1) : '?';
+        return `- ${m.name} (${size} GB)`;
+      })
+      .join('\n') +
+    `\n\nCurrent default: ${current}`
+  );
 }
 
 // ---------- Skills Handler ----------
@@ -430,8 +679,15 @@ async function handleSkillsRequest() {
     return "You don't have any custom skills yet. Skills are reusable prompts and workflows.";
   }
 
-  return `Your skills (${stats.total}):\n\n` +
-    skills.map(s => `- **${s.name}**: ${s.description || 'No description'}\n  ${s.triggers.length} triggers`).join('\n\n');
+  return (
+    `Your skills (${stats.total}):\n\n` +
+    skills
+      .map(
+        (s) =>
+          `- **${s.name}**: ${s.description || 'No description'}\n  ${s.triggers.length} triggers`,
+      )
+      .join('\n\n')
+  );
 }
 
 // ---------- Web Search ----------
@@ -439,7 +695,7 @@ async function handleSkillsRequest() {
 // ---------- Shell Command ----------
 async function handleRunRequest(input) {
   const cmd = input.replace(/run|execute|terminal|bash|command/i, '').trim();
-  if (!cmd) return "What command should I run?";
+  if (!cmd) return 'What command should I run?';
 
   const result = await runShellCommand(cmd);
   return `Command output:\n\n${result}`;
@@ -447,32 +703,28 @@ async function handleRunRequest(input) {
 
 // ---------- Help ----------
 function handleHelp() {
-  return `I'm Charlize, your Level 3 AI assistant! Just talk to me naturally:\n\n` +
+  return (
+    `I'm Charlize, your Level 3 AI assistant! Just talk to me naturally:\n\n` +
     `**Scheduling**\n"Remind me to stretch every hour"\n"Schedule a daily summary at 9am"\n"Set a reminder for Monday at 3pm"\n\n` +
-
     `**Tasks & Delegation**\n"Write a function to sort an array"\n"Create a React component for a button"\n"Analyze the pros and cons of these options"\n"Think about whether I should use SQL or NoSQL"\n\n` +
-
     `**Tracking**\n"I had a cappuccino, log it"\n"Log 450 calories for my sandwich"\n"How many calories today?"\n\n` +
-
     `**Memory**\n"What did we talk about today?"\n"Show me my memory stats"\n"Curate my memories"\n\n` +
-
     `**Level 2 Features**\n"Be more concise" - Adjust my personality\n"Remember this information" - Store in vector memory\n"Create a project" - Generate TODO.md with background tasks\n"Connect to API" - Set up dynamic API connectors\n\n` +
-
     `**Level 3: Web Oracle (Research)**\n"Research the latest AI developments"\n"Investigate climate change technologies"\n"What's new in quantum computing?"\n"Research Rust vs C++ performance"\n\n` +
-
     `**Level 3: Orchestrator (Claude Code)**\n"Debug this complex bug in my codebase"\n"Refactor the entire project structure"\n"Do a full architecture review"\n"Use claude code for a complete rewrite"\n\n` +
-
     `**Current Information**\n"Search for latest AI news"\n"What's new in tech?"\n"What's happening today?"\n\n` +
-
     `**Quick Info**\n"What models do I have?"\n"Show me my scheduled tasks"\n\n` +
-
-    `Just say what you need - I'll figure it out!`;
+    `Just say what you need - I'll figure it out!`
+  );
 }
 
 // ---------- Orchestrator Handler (Level 3) ----------
 async function handleOrchestratorRequest(input) {
   const task = input
-    .replace(/use claude code|spawn claude|run claude cli|orchestrate|dual stream|streaming response|complex coding|deep refactor|full codebase|claude.*task|advanced debugging|architecture review/gi, '')
+    .replace(
+      /use claude code|spawn claude|run claude cli|orchestrate|dual stream|streaming response|complex coding|deep refactor|full codebase|claude.*task|advanced debugging|architecture review/gi,
+      '',
+    )
     .trim();
 
   if (!task) {
@@ -519,52 +771,83 @@ Or use direct mode:
     }
   } else {
     // Orchestrate - use both
-    console.log('[ORCHESTRATOR] Running with both Ollama and Claude Code in parallel...\n');
+    console.log(
+      '[ORCHESTRATOR] Running with both Ollama and Claude Code in parallel...\n',
+    );
     return `I've dispatched your task to both local Ollama and Claude Code CLI for comprehensive assistance. Check the output above!`;
   }
 }
 
 // ---------- Tracking ----------
-// Helper function to detect tracker type and auto-create if needed
-async function detectAndCreateTracker(input, store) {
+// LLM-based intent analyzer for tracking requests
+async function analyzeTrackingIntent(input, existingTrackers) {
   try {
-    const detectionPrompt = `Analyze this user statement and determine if it contains data that should be tracked (like food, exercise, sleep, habits, mood, water intake, medication, etc.):
+    const trackersList =
+      existingTrackers.length > 0
+        ? existingTrackers
+            .map((t) => `- ${t.displayName} (type: ${t.type})`)
+            .join('\n')
+        : 'No trackers exist yet';
 
-"${input}"
+    const intentPrompt = `Analyze this user input and determine the tracking intent:
+
+User input: "${input}"
+
+Existing trackers:
+${trackersList}
 
 Respond with ONLY valid JSON:
 {
-  "trackable": true/false,
-  "trackerType": "nutrition|workout|sleep|habit|mood|hydration|medication|custom",
-  "description": "brief description of what tracker this needs",
+  "intentType": "log|query|none",
+  "trackerType": "nutrition|workout|sleep|habit|mood|hydration|medication|custom|unknown",
+  "trackerNeeded": "existing_tracker_name or null if needs new tracker",
+  "description": "brief description of what tracker this needs (if new)",
   "confidence": 0.0-1.0
 }
 
+Intent types:
+- "log": User wants to record/log data (e.g., "I had coffee", "did a 5k run", "log calories")
+- "query": User wants to retrieve/view data (e.g., "what did I eat", "how many calories", "show my workouts")
+- "none": Not tracking-related
+
 Examples:
-- "I had a coffee with 150 calories" -> {trackable: true, trackerType: "nutrition", description: "nutrition tracker for food and drinks", confidence: 0.9}
-- "Just finished a 5k run" -> {trackable: true, trackerType: "workout", description: "workout tracker for exercise", confidence: 0.95}
-- "Slept 7 hours last night" -> {trackable: true, trackerType: "sleep", description: "sleep tracker", confidence: 0.9}
-- "What's the weather?" -> {trackable: false, confidence: 0.0}`;
+- "I had a cappuccino" -> {intentType: "log", trackerType: "nutrition", confidence: 0.95}
+- "What did I drink today?" -> {intentType: "query", trackerType: "nutrition", confidence: 0.95}
+- "I did a 5k run at zone 2" -> {intentType: "log", trackerType: "workout", confidence: 0.95}
+- "Show me my workouts this week" -> {intentType: "query", trackerType: "workout", confidence: 0.95}
+- "What's the weather?" -> {intentType: "none", confidence: 0.0}
+
+If a matching tracker exists, set "trackerNeeded" to its type. If a new tracker is needed, set it to null.`;
 
     const model = getDefaultModel();
-    const detectionResponse = await chatCompletion(model, [
-      { role: 'system', content: 'You are a data classifier. Output only valid JSON.' },
-      { role: 'user', content: detectionPrompt }
+    const response = await chatCompletion(model, [
+      {
+        role: 'system',
+        content: 'You are an intent classifier. Output only valid JSON.',
+      },
+      { role: 'user', content: intentPrompt },
     ]);
 
-    const detectionContent = detectionResponse.message;
-    const detection = JSON.parse(detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+    const content = response.message;
+    const intent = JSON.parse(content.match(/\{[\s\S]*\}/)?.[0] || '{}');
 
-    // If not trackable or low confidence, return null
-    if (!detection.trackable || detection.confidence < 0.6) {
-      return null;
-    }
+    return intent;
+  } catch (e) {
+    console.error('[Track] Intent analysis failed:', e.message);
+    return { intentType: 'none', confidence: 0 };
+  }
+}
 
+// Helper function to find or create appropriate tracker
+async function findOrCreateTracker(trackerType, description, store) {
+  try {
     // Check if a tracker of this type already exists
     const trackers = store.listTrackers();
-    const existingTracker = trackers.find(t =>
-      t.type === detection.trackerType ||
-      (detection.trackerType === 'nutrition' && (t.type === 'food' || t.type === 'nutrition'))
+    const existingTracker = trackers.find(
+      (t) =>
+        t.type === trackerType ||
+        (trackerType === 'nutrition' &&
+          (t.type === 'food' || t.type === 'nutrition')),
     );
 
     if (existingTracker) {
@@ -572,9 +855,9 @@ Examples:
     }
 
     // Auto-create the tracker
-    console.log(`  \x1b[36m[Auto-creating ${detection.trackerType} tracker...]\x1b[0m`);
+    console.log(`  \x1b[36m[Auto-creating ${trackerType} tracker...]\x1b[0m`);
 
-    const trackerConfig = await parseTrackerFromNaturalLanguage(detection.description);
+    const trackerConfig = await parseTrackerFromNaturalLanguage(description);
     if (!trackerConfig) {
       return null;
     }
@@ -588,177 +871,76 @@ Examples:
 
     console.log(`  \x1b[32m[Created tracker: @${trackerConfig.name}]\x1b[0m`);
     return trackerConfig;
-
   } catch (e) {
-    console.error('[Track] Detection/creation failed:', e.message);
+    console.error('[Track] Tracker creation failed:', e.message);
     return null;
   }
 }
 
 async function handleTrackRequest(input) {
-  const lower = input.toLowerCase();
   const store = new TrackerStore();
   const trackers = store.listTrackers();
 
-  // Query patterns - don't auto-log questions
-  if (/how many|what'?ve i|what did i|show me|stats/i.test(lower)) {
+  // Step 1: Use LLM to analyze the intent
+  const intent = await analyzeTrackingIntent(input, trackers);
+
+  // If not tracking-related or low confidence, return null to let it be handled elsewhere
+  if (intent.intentType === 'none' || intent.confidence < 0.6) {
     if (trackers.length === 0) {
-      return "No trackers configured yet. Create one with: /track new";
+      return 'No trackers configured. Create one with: /track new';
     }
-    return await handleTrackQuery(input, lower, store, trackers);
+    return null;
   }
 
-  // If no trackers exist, try LLM-based auto-detection and creation
-  if (trackers.length === 0) {
-    const tracker = await detectAndCreateTracker(input, store);
-    if (!tracker) {
-      return "No trackers configured. Create one with: /track new";
+  // Step 2: Handle QUERY intent
+  if (intent.intentType === 'query') {
+    if (trackers.length === 0) {
+      return "No trackers configured yet. Start logging data and I'll create one for you!";
     }
 
-    // Log the data to the tracker
-    const logResult = await logToTracker(tracker, input, store);
-    if (logResult.success) {
-      return `\x1b[32m[New tracker created!]\x1b[0m\n\n${logResult.message}`;
-    }
+    // Find the appropriate tracker for the query
+    const tracker =
+      trackers.find(
+        (t) =>
+          t.type === intent.trackerType ||
+          (intent.trackerType === 'nutrition' &&
+            (t.type === 'food' || t.type === 'nutrition')),
+      ) || trackers[0];
 
-    return `Tracker created: **${tracker.displayName}** (@${tracker.name})\n\nBut I couldn't parse your data. Try again with more details.`;
+    return await handleTrackQuery(input, tracker, store);
   }
 
-  // Check for explicit tracker specification: "log to <tracker>" or "add to <tracker>"
-  const explicitTrackerMatch = lower.match(/log (to |in )?(\w+)|add (to |in )?(\w+)|record (to |in )?(\w+)/);
-  if (explicitTrackerMatch) {
-    const trackerName = explicitTrackerMatch[2] || explicitTrackerMatch[4] || explicitTrackerMatch[6];
-    const matchedTracker = trackers.find(t =>
-      t.name.toLowerCase().includes(trackerName.toLowerCase()) ||
-      t.displayName.toLowerCase().includes(trackerName.toLowerCase())
+  // Step 3: Handle LOG intent
+  if (intent.intentType === 'log') {
+    // Find or create the appropriate tracker
+    const tracker = await findOrCreateTracker(
+      intent.trackerType,
+      intent.description || `${intent.trackerType} tracker`,
+      store,
     );
-    if (matchedTracker) {
-      const result = await logToTracker(matchedTracker, input, store);
-      if (result.success) {
-        return result.message;
-      }
-      return `Failed to log to ${matchedTracker.displayName}. Try rephrasing your request.`;
-    }
-  }
 
-  // Check all trackers for auto-detect triggers and log to matching ones
-  for (const tracker of trackers) {
-    if (matchesAutoDetect(tracker, input)) {
-      const result = await logToTracker(tracker, input, store);
-      if (result.success) {
-        return result.message;
-      }
-      // If auto-detect matched but logging failed, continue to try other trackers
-    }
-  }
-
-  // Try to find specific tracker based on keywords - expanded list
-  const foodKeywords = /calories?|foods?|meal|ate|had|drank|eating|drinking|snack|dinner|lunch|breakfast|coffee|cappuccino|latte|tea|milk|protein|carb|fat/i;
-  const workoutKeywords = /workouts?|exercises?|gym|lifted|ran|walked|swam|biked|cycled|weights?|reps|sets|mile|km|steps/i;
-
-  // Check for explicit "log <thing>" or "track <thing>" patterns
-  const logPattern = /(?:log|track|record|add)\s+(?:my|the|a|an)?\s*(calories?|foods?|meals?|workouts?|exercises?)/i;
-  const logMatch = lower.match(logPattern);
-
-  if (logMatch) {
-    // User said something like "log calories" or "track food"
-    const thing = logMatch[1].toLowerCase();
-    const isFood = /calories?|foods?|meals?/.test(thing);
-    const isWorkout = /workouts?|exercises?/.test(thing);
-
-    if (isFood) {
-      const foodTracker = trackers.find(t => t.type === 'nutrition' || t.name.includes('food'));
-      if (foodTracker) {
-        const result = await logToTracker(foodTracker, input, store);
-        if (result.success) {
-          return result.message;
-        }
-      }
-      // No food tracker exists - try to auto-create
-      const tracker = await detectAndCreateTracker(input, store);
-      if (tracker) {
-        const result = await logToTracker(tracker, input, store);
-        if (result.success) {
-          return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
-        }
-      }
+    if (!tracker) {
+      return "I couldn't create a tracker for this. Try: /track new";
     }
 
-    if (isWorkout) {
-      const workoutTracker = trackers.find(t => t.type === 'workout');
-      if (workoutTracker) {
-        const result = await logToTracker(workoutTracker, input, store);
-        if (result.success) {
-          return result.message;
-        }
-      }
-      // No workout tracker exists - try to auto-create
-      const tracker = await detectAndCreateTracker(input, store);
-      if (tracker) {
-        const result = await logToTracker(tracker, input, store);
-        if (result.success) {
-          return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
-        }
-      }
-    }
-  }
+    // Log the data
+    const result = await logToTracker(tracker, input, store);
 
-  if (foodKeywords.test(lower)) {
-    const foodTracker = trackers.find(t => t.type === 'nutrition' || t.name.includes('food'));
-    if (foodTracker) {
-      const result = await logToTracker(foodTracker, input, store);
-      if (result.success) {
-        return result.message;
-      }
-    }
-  }
-
-  if (workoutKeywords.test(lower)) {
-    const workoutTracker = trackers.find(t => t.type === 'workout');
-    if (workoutTracker) {
-      const result = await logToTracker(workoutTracker, input, store);
-      if (result.success) {
-        return result.message;
-      }
-    }
-    // No workout tracker exists but workout keywords detected - try to auto-create
-    const tracker = await detectAndCreateTracker(input, store);
-    if (tracker) {
-      const result = await logToTracker(tracker, input, store);
-      if (result.success) {
-        return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
-      }
-    }
-  }
-
-  // Smart fallback: if there's only one tracker, use LLM to check if this is appropriate for it
-  if (trackers.length === 1) {
-    // Try LLM detection to see if we need a different tracker type
-    const detectedTracker = await detectAndCreateTracker(input, store);
-    if (detectedTracker && detectedTracker.name !== trackers[0].name) {
-      // A new tracker was created for a different type
-      const result = await logToTracker(detectedTracker, input, store);
-      if (result.success) {
-        return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
-      }
-    }
-    // Either detection failed or returned the existing tracker - use existing
-    const result = await logToTracker(trackers[0], input, store);
     if (result.success) {
+      // Check if this was a newly created tracker
+      const wasNew =
+        trackers.length === 0 || !trackers.find((t) => t.name === tracker.name);
+      if (wasNew) {
+        return `\x1b[32m[New tracker created!]\x1b[0m\n\n${result.message}`;
+      }
       return result.message;
     }
+
+    return `Failed to log to ${tracker.displayName}. Try rephrasing with more details.`;
   }
 
-  // Build helpful fallback message with explicit options
-  const trackerOptions = trackers.map(t => {
-    const typeHint = t.type === 'nutrition' ? '(food/calories)' : t.type === 'workout' ? '(workouts/exercise)' : '';
-    return `- "${t.displayName}" ${typeHint}`;
-  }).join('\n');
-
-  return `I wasn't sure which tracker to use. You can:\n` +
-    `- Say "log to <tracker-name>" (e.g., "log to Food Tracker")\n` +
-    `- Use tracker-specific keywords like "calories" or "workout"\n\n` +
-    `Available trackers:\n${trackerOptions || '- No trackers configured'}`;
+  // Fallback
+  return null;
 }
 
 // Simple heuristic parser for food entries as fallback when LLM fails
@@ -767,12 +949,18 @@ function parseFoodHeuristic(text) {
 
   // Extract food name - look for text after "had", "ate", "drank" or at the start
   let foodName = '';
-  const hadMatch = lower.match(/(?:had|ate|drank|consumed)\s+(?:a\s+)?(?:cup of\s+)?(.+)/);
+  const hadMatch = lower.match(
+    /(?:had|ate|drank|consumed)\s+(?:a\s+)?(?:cup of\s+)?(.+)/,
+  );
   if (hadMatch) {
-    foodName = hadMatch[1].replace(/,?\s*(log|track|record|add)\s*(calories|food|meal).*/i, '').trim();
+    foodName = hadMatch[1]
+      .replace(/,?\s*(log|track|record|add)\s*(calories|food|meal).*/i, '')
+      .trim();
   } else {
     // Try to extract from the beginning
-    foodName = text.replace(/,?\s*(log|track|record|add)\s*(calories|food|meal).*/i, '').trim();
+    foodName = text
+      .replace(/,?\s*(log|track|record|add)\s*(calories|food|meal).*/i, '')
+      .trim();
   }
 
   // Clean up the food name
@@ -785,17 +973,43 @@ function parseFoodHeuristic(text) {
 
   // Estimate calories based on common foods
   const calorieEstimates = {
-    'coffee': 5, 'espresso': 3, 'cappuccino': 120, 'latte': 190,
-    'tea': 2, 'green tea': 0, 'black coffee': 5,
-    'egg': 78, 'eggs': 156, 'toast': 80, 'bread': 80,
-    'banana': 105, 'apple': 95, 'orange': 62,
-    'chicken': 165, 'beef': 250, 'fish': 136, 'salmon': 208,
-    'rice': 130, 'pasta': 220, 'salad': 150,
-    'pizza': 285, 'burger': 350, 'fries': 230, 'sandwich': 350,
-    'milk': 103, 'orange juice': 110, 'water': 0,
-    'yogurt': 150, 'cereal': 120, 'oatmeal': 150,
-    'avocado': 160, 'nuts': 180, 'almonds': 164,
-    'cheese': 110, 'chocolate': 150, 'ice cream': 270
+    coffee: 5,
+    espresso: 3,
+    cappuccino: 120,
+    latte: 190,
+    tea: 2,
+    'green tea': 0,
+    'black coffee': 5,
+    egg: 78,
+    eggs: 156,
+    toast: 80,
+    bread: 80,
+    banana: 105,
+    apple: 95,
+    orange: 62,
+    chicken: 165,
+    beef: 250,
+    fish: 136,
+    salmon: 208,
+    rice: 130,
+    pasta: 220,
+    salad: 150,
+    pizza: 285,
+    burger: 350,
+    fries: 230,
+    sandwich: 350,
+    milk: 103,
+    'orange juice': 110,
+    water: 0,
+    yogurt: 150,
+    cereal: 120,
+    oatmeal: 150,
+    avocado: 160,
+    nuts: 180,
+    almonds: 164,
+    cheese: 110,
+    chocolate: 150,
+    'ice cream': 270,
   };
 
   let calories = null;
@@ -817,7 +1031,8 @@ function parseFoodHeuristic(text) {
   }
 
   const data = {};
-  if (foodName) data.meal = foodName.charAt(0).toUpperCase() + foodName.slice(1);
+  if (foodName)
+    data.meal = foodName.charAt(0).toUpperCase() + foodName.slice(1);
   if (calories) data.calories = calories;
 
   return data;
@@ -830,7 +1045,9 @@ function parseWorkoutHeuristic(text) {
   const data = {};
 
   // Extract exercise name
-  const exerciseMatch = lower.match(/(?:did|completed|finished|started)\s+(?:a\s+)?(?:workout of\s+)?(.+)/);
+  const exerciseMatch = lower.match(
+    /(?:did|completed|finished|started)\s+(?:a\s+)?(?:workout of\s+)?(.+)/,
+  );
   if (exerciseMatch) {
     data.exercise = exerciseMatch[1].trim();
   } else {
@@ -854,17 +1071,24 @@ async function logToTracker(tracker, input, store) {
 
     // Fallback to heuristic parsing if LLM parsing fails or returns empty
     if (!parsed.success || Object.keys(parsed.data || {}).length === 0) {
-      console.log(`[Tracker] LLM parsing failed, trying heuristic parser for ${tracker.type}`);
+      console.log(
+        `[Tracker] LLM parsing failed, trying heuristic parser for ${tracker.type}`,
+      );
 
       if (tracker.type === 'nutrition' || tracker.type === 'food') {
         parsed = { success: true, data: parseFoodHeuristic(input) };
       } else if (tracker.type === 'workout') {
         parsed = { success: true, data: parseWorkoutHeuristic(input) };
       }
-    } else if (parsed.success && (tracker.type === 'nutrition' || tracker.type === 'food')) {
+    } else if (
+      parsed.success &&
+      (tracker.type === 'nutrition' || tracker.type === 'food')
+    ) {
       // For nutrition, merge heuristic estimates if calories are missing
       if (!parsed.data.calories) {
-        console.log(`[Tracker] LLM didn't extract calories, trying heuristic estimates...`);
+        console.log(
+          `[Tracker] LLM didn't extract calories, trying heuristic estimates...`,
+        );
         const heuristicData = parseFoodHeuristic(input);
         // Merge heuristic calories into LLM-parsed data
         if (heuristicData.calories) {
@@ -878,11 +1102,14 @@ async function logToTracker(tracker, input, store) {
       return { success: false, message: null };
     }
 
-    console.log(`[Tracker] Extracted data for ${tracker.name}:`, JSON.stringify(parsed.data));
+    console.log(
+      `[Tracker] Extracted data for ${tracker.name}:`,
+      JSON.stringify(parsed.data),
+    );
 
     const result = store.addRecord(tracker.name, {
       data: parsed.data,
-      source: 'natural-language'
+      source: 'natural-language',
     });
 
     if (result.success) {
@@ -892,7 +1119,10 @@ async function logToTracker(tracker, input, store) {
         .map(([k, v]) => `${k}: ${v}`)
         .join(', ');
 
-      return { success: true, message: `Logged to **${tracker.displayName}**:\n${dataEntries}` };
+      return {
+        success: true,
+        message: `Logged to **${tracker.displayName}**:\n${dataEntries}`,
+      };
     }
 
     console.error(`[Tracker] Failed to add record:`, result.error);
@@ -903,87 +1133,78 @@ async function logToTracker(tracker, input, store) {
   }
 }
 
-async function handleTrackQuery(input, lower, store, trackers) {
+async function handleTrackQuery(input, tracker, store) {
   const query = new QueryEngine();
+  const stats = query.getStats(tracker.name, 'today');
 
-  // What did I eat/drink query
-  if (/what (did i|have i|did you|have you) (eat|ate|drink|drank|drunk|have|had|consume|consumed)/i.test(lower)) {
-    const foodTracker = trackers.find(t =>
-      t.type === 'nutrition' ||
-      t.type === 'food' ||
-      t.name.includes('food')
-    );
+  if (stats.totalEntries === 0) {
+    return `No entries logged today for ${tracker.displayName}.`;
+  }
 
-    if (foodTracker) {
-      const stats = query.getStats(foodTracker.name, 'today');
+  // Calculate total calories manually from records (for nutrition trackers)
+  const totalCals = stats.records.reduce(
+    (sum, r) => sum + (r.data?.calories || 0),
+    0,
+  );
 
-      if (stats.totalEntries === 0) {
-        return `No food/drink entries logged today for ${foodTracker.displayName}.`;
-      }
+  // Filter out invalid entries like "No meal mentioned"
+  const validRecords = stats.records.filter((r) => {
+    const meal = r.data?.name || r.data?.meal || r.data?.exercise || '';
+    return meal && meal.toLowerCase() !== 'no meal mentioned';
+  });
 
-      const totalCals = stats.aggregations?.calories?.total || 0;
-      const entries = stats.records.map(r => {
+  if (validRecords.length === 0) {
+    return `No valid entries logged today for ${tracker.displayName}.`;
+  }
+
+  // Format response based on tracker type
+  if (tracker.type === 'nutrition' || tracker.type === 'food') {
+    const entries = validRecords
+      .map((r) => {
         const meal = r.data?.name || r.data?.meal || 'Entry';
         const cal = r.data?.calories ? ` (${r.data.calories} cal)` : '';
         return `- ${meal}${cal}`;
-      }).join('\n');
+      })
+      .join('\n');
 
-      return `**${foodTracker.displayName}** today:\n\n` +
-        entries +
-        `\n\nTotal: ${stats.totalEntries} entries, ${totalCals.toFixed(0)} calories`;
-    }
-  }
-
-  // Calories query
-  if (/calories|cals/i.test(lower)) {
-    const foodTracker = trackers.find(t =>
-      t.type === 'nutrition' ||
-      t.name.includes('food') ||
-      (t.config?.metrics && t.config.metrics.includes('calories'))
+    return (
+      `**${tracker.displayName}** today:\n\n` +
+      entries +
+      `\n\nTotal: ${validRecords.length} entries, ${totalCals.toFixed(0)} calories`
     );
+  } else if (tracker.type === 'workout') {
+    const entries = validRecords
+      .map((r) => {
+        const exercise = r.data?.exercise || r.data?.name || 'Workout';
+        const details = [];
+        if (r.data?.duration) details.push(`${r.data.duration}`);
+        if (r.data?.distance) details.push(`${r.data.distance}`);
+        if (r.data?.sets) details.push(`${r.data.sets} sets`);
+        const detailStr = details.length > 0 ? ` (${details.join(', ')})` : '';
+        return `- ${exercise}${detailStr}`;
+      })
+      .join('\n');
 
-    if (foodTracker) {
-      const stats = query.getStats(foodTracker.name, 'today');
+    return (
+      `**${tracker.displayName}** today:\n\n` +
+      entries +
+      `\n\nTotal: ${validRecords.length} workouts`
+    );
+  } else {
+    // Generic tracker display
+    const entries = validRecords
+      .map((r, i) => {
+        const mainField = Object.entries(r.data)[0];
+        return `- Entry ${i + 1}: ${mainField ? `${mainField[0]}=${mainField[1]}` : 'No data'}`;
+      })
+      .join('\n');
 
-      if (stats.totalEntries === 0) {
-        return `No food entries logged today for ${foodTracker.displayName}.`;
-      }
-
-      const totalCals = stats.aggregations?.calories?.total || 0;
-      return `**${foodTracker.displayName}** today:\n\n` +
-        `Total entries: ${stats.totalEntries}\n` +
-        `Total calories: **${totalCals.toFixed(0)}**\n\n` +
-        stats.records.slice(0, 5).map(r =>
-          `- ${r.data?.name || r.data?.meal || 'Entry'}: ${r.data?.calories || 0} cal`
-        ).join('\n');
-    }
+    return (
+      `**${tracker.displayName}** today:\n\n` +
+      entries +
+      `\n\nTotal: ${validRecords.length} entries`
+    );
   }
-
-  // General stats query
-  if (/stats|today|history/i.test(lower)) {
-    // Find relevant tracker
-    let tracker = trackers[0];
-    if (/food|meal|calories/i.test(lower)) {
-      tracker = trackers.find(t => t.type === 'nutrition' || t.name.includes('food')) || tracker;
-    } else if (/workout|exercise/i.test(lower)) {
-      tracker = trackers.find(t => t.type === 'workout') || tracker;
-    }
-
-    if (!tracker) {
-      return "No trackers found.";
-    }
-
-    const stats = query.getStats(tracker.name, 'today');
-    return `**${tracker.displayName}** today:\n\n` +
-      `Total entries: ${stats.totalEntries}\n` +
-      (stats.aggregations && Object.keys(stats.aggregations).length > 0
-        ? Object.entries(stats.aggregations).map(([k, v]) =>
-            `- ${k}: ${v.total?.toFixed(1) || 'N/A'} (avg: ${v.average?.toFixed(1) || 'N/A'})`
-          ).join('\n')
-        : '- No aggregations available');
-  }
-
-  return "Try asking:\n- 'How many calories today?'\n- 'Show me my food stats'\n- 'What did I eat?'";
 }
 
 // ============================================================================
@@ -998,7 +1219,9 @@ function handlePersonaRequest(input) {
     // List available personas
     return `**Available Personas:**
 
-${Object.values(personas).map(p => `- **${p.name}** (${p.role})`).join('\n')}
+${Object.values(personas)
+  .map((p) => `- **${p.name}** (${p.role})`)
+  .join('\n')}
 
 Say "Use <persona name>" to switch.`;
   }
@@ -1007,18 +1230,22 @@ Say "Use <persona name>" to switch.`;
     // Modify current persona
     const result = modifyPersonaFeedback('charlize', input);
     if (result.success) {
-      return `Updated persona preferences:\n\n` +
+      return (
+        `Updated persona preferences:\n\n` +
         `- ${result.modifications.join('\n- ')}\n\n` +
-        `These changes are now permanent.`;
+        `These changes are now permanent.`
+      );
     }
-    return "Could not update persona. Try rephrasing your request.";
+    return 'Could not update persona. Try rephrasing your request.';
   }
 
   // Default: show current persona
   const current = getSystemPrompt();
-  return `Current persona: Charlize\n\n` +
+  return (
+    `Current persona: Charlize\n\n` +
     `Say "be more concise" or "be more friendly" to adjust my behavior.\n` +
-    `Say "change persona" to see all available personas.`;
+    `Say "change persona" to see all available personas.`
+  );
 }
 
 // ============================================================================
@@ -1031,7 +1258,7 @@ async function handleMemory2Request(input) {
   if (/remember|store/i.test(lower)) {
     // Store new memory
     const content = input.replace(/remember|store|this|that/i, '').trim();
-    if (!content) return "What would you like me to remember?";
+    if (!content) return 'What would you like me to remember?';
 
     await addMemory(content, { type: 'user_preference' });
     await rememberPreference('user_instruction', content, input);
@@ -1045,7 +1272,7 @@ async function handleMemory2Request(input) {
     const results = await searchMemories(query || input, { limit: 5 });
 
     if (results.length === 0) {
-      return "No matching memories found.";
+      return 'No matching memories found.';
     }
 
     return `**Semantic Search Results:**
@@ -1058,7 +1285,9 @@ ${results.map((r, i) => `${i + 1}. ${r.content} (${(r.score * 100).toFixed(0)}% 
   return `**Vector Memory Stats:**
 
 Total memories: ${stats.totalMemories}
-${Object.entries(stats.byType).map(([type, count]) => `- ${type}: ${count}`).join('\n')}`;
+${Object.entries(stats.byType)
+  .map(([type, count]) => `- ${type}: ${count}`)
+  .join('\n')}`;
 }
 
 // ============================================================================
@@ -1070,7 +1299,8 @@ async function handleWorkerRequest(input) {
 
   if (/create (a )?project/i.test(lower)) {
     // Create project with TODO.md
-    const projectName = input.replace(/create|a|project/i, '').trim() || 'New Project';
+    const projectName =
+      input.replace(/create|a|project/i, '').trim() || 'New Project';
 
     const task = createTask({
       name: projectName,
@@ -1081,8 +1311,8 @@ async function handleWorkerRequest(input) {
         { name: 'Research dependencies', type: 'research' },
         { name: 'Implement core features', type: 'code' },
         { name: 'Write tests', type: 'process' },
-        { name: 'Documentation', type: 'process' }
-      ]
+        { name: 'Documentation', type: 'process' },
+      ],
     });
 
     // Generate TODO.md
@@ -1090,28 +1320,38 @@ async function handleWorkerRequest(input) {
     const todoPath = path.join(process.cwd(), 'TODO.md');
     fs.writeFileSync(todoPath, todoContent);
 
-    return `Created project "${projectName}"!\n\n` +
+    return (
+      `Created project "${projectName}"!\n\n` +
       `- Background task created: ${task.id}\n` +
       `- TODO.md generated at: ${todoPath}\n` +
-      `- Subtasks: ${task.subtasks.length}`;
+      `- Subtasks: ${task.subtasks.length}`
+    );
   }
 
   if (/run (in |a )?background|async/i.test(lower)) {
     // Create background task
-    const taskName = input.replace(/run|in|background|async|long|running|task/i, '').trim() || 'Background Task';
-    const taskType = /research/i.test(lower) ? 'research' : /code|build/i.test(lower) ? 'code' : 'process';
+    const taskName =
+      input.replace(/run|in|background|async|long|running|task/i, '').trim() ||
+      'Background Task';
+    const taskType = /research/i.test(lower)
+      ? 'research'
+      : /code|build/i.test(lower)
+        ? 'code'
+        : 'process';
 
     const task = createTask({
       name: taskName,
       type: taskType,
       payload: { description: input },
-      priority: 'normal'
+      priority: 'normal',
     });
 
-    return `Started background task: **${task.name}**\n` +
+    return (
+      `Started background task: **${task.name}**\n` +
       `- Task ID: ${task.id}\n` +
       `- Status: ${task.status}\n` +
-      `Check back later for results!`;
+      `Check back later for results!`
+    );
   }
 
   // Show worker stats
@@ -1160,7 +1400,7 @@ Example:
 Total connectors: ${stats.totalConnectors}
 Active: ${stats.activeConnectors}
 
-${connectors.length > 0 ? connectors.map(c => `- ${c.name} (${c.type})`).join('\n') : 'No connectors configured yet.'}
+${connectors.length > 0 ? connectors.map((c) => `- ${c.name} (${c.type})`).join('\n') : 'No connectors configured yet.'}
 
 Say 'connect to API' to add a new one.`;
 }
@@ -1219,52 +1459,68 @@ const CURRENT_INFO_PATTERNS = [
   /what does the internet say/i,
   /what is happening/i,
   /what is going on/i,
-  /current events/i
+  /current events/i,
 ];
 
 async function webSearch(query) {
   return new Promise((resolve) => {
-    const req = https.request({
-      hostname: 'duckduckgo.com',
-      path: `/?q=${encodeURIComponent(query)}&t=h_&ia=web`,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5'
+    const req = https.request(
+      {
+        hostname: 'duckduckgo.com',
+        path: `/?q=${encodeURIComponent(query)}&t=h_&ia=web`,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+        },
+        timeout: 15000,
       },
-      timeout: 15000
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        const results = [];
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          const results = [];
 
-        // DuckDuckGo HTML format: <a class="result__a" href="...">Actual Title</a>
-        const linkRegex = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
-        let match;
+          // DuckDuckGo HTML format: <a class="result__a" href="...">Actual Title</a>
+          const linkRegex =
+            /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+          let match;
 
-        while ((match = linkRegex.exec(data)) && results.length < 5) {
-          let title = match[2].trim()
-            .replace(/<[^>]*>/g, '') // Remove any nested HTML
-            .replace(/&#x27;/g, "'")
-            .replace(/&amp;/g, '&')
-            .replace(/&quot;/g, '"')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>');
+          while ((match = linkRegex.exec(data)) && results.length < 5) {
+            let title = match[2]
+              .trim()
+              .replace(/<[^>]*>/g, '') // Remove any nested HTML
+              .replace(/&#x27;/g, "'")
+              .replace(/&amp;/g, '&')
+              .replace(/&quot;/g, '"')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>');
 
-          const url = match[1];
+            const url = match[1];
 
-          // Skip empty or noise titles
-          if (title && title.length > 15 && !title.match(/^(Web|Images|Videos|News|Maps|More|Settings|Privacy)$/)) {
-            results.push({ title, url });
+            // Skip empty or noise titles
+            if (
+              title &&
+              title.length > 15 &&
+              !title.match(
+                /^(Web|Images|Videos|News|Maps|More|Settings|Privacy)$/,
+              )
+            ) {
+              results.push({ title, url });
+            }
           }
-        }
 
-        resolve(results);
-      });
-    });
+          resolve(results);
+        });
+      },
+    );
     req.on('error', () => resolve([]));
-    req.on('timeout', () => { req.destroy(); resolve([]); });
+    req.on('timeout', () => {
+      req.destroy();
+      resolve([]);
+    });
     req.end();
   });
 }
@@ -1276,7 +1532,7 @@ async function handleWebSearch(input) {
     .replace(/^(for |the )/, '');
 
   if (!query) {
-    return "What would you like me to search for? Try: \"Search for latest AI news\"";
+    return 'What would you like me to search for? Try: "Search for latest AI news"';
   }
 
   const results = await webSearch(query);
@@ -1285,18 +1541,26 @@ async function handleWebSearch(input) {
     return `No results found for "${query}". Try a different search term.`;
   }
 
-  return `**Web Search: ${query}**\n\n` +
-    results.slice(0, 5).map((r, i) => {
-      const url = r.url ? `\n   ${r.url}` : '';
-      return `${i + 1}. ${r.title}${url}`;
-    }).join('\n\n') +
-    `\n\n_${results.length} results found_`;
+  return (
+    `**Web Search: ${query}**\n\n` +
+    results
+      .slice(0, 5)
+      .map((r, i) => {
+        const url = r.url ? `\n   ${r.url}` : '';
+        return `${i + 1}. ${r.title}${url}`;
+      })
+      .join('\n\n') +
+    `\n\n_${results.length} results found_`
+  );
 }
 
 // ---------- Web Oracle Research Handler ----------
 async function handleResearchRequest(input) {
   const query = input
-    .replace(/research|look into|investigate|find out about|tell me about|what's the|whats the|latest|hot topic|trending|current state of/gi, '')
+    .replace(
+      /research|look into|investigate|find out about|tell me about|what's the|whats the|latest|hot topic|trending|current state of/gi,
+      '',
+    )
     .trim()
     .replace(/^(on |about |the )/, '');
 
@@ -1326,14 +1590,24 @@ I'll search the web and provide comprehensive results with sources.
   }
 }
 
-const SAFE_COMMANDS = new Set(['ls', 'cat', 'head', 'tail', 'pwd', 'date', 'echo', 'git status', 'git log --oneline']);
+const SAFE_COMMANDS = new Set([
+  'ls',
+  'cat',
+  'head',
+  'tail',
+  'pwd',
+  'date',
+  'echo',
+  'git status',
+  'git log --oneline',
+]);
 
 async function runShellCommand(cmd, confirm = true) {
-  const isDangerous = !SAFE_COMMANDS.some(c => cmd.startsWith(c));
+  const isDangerous = !SAFE_COMMANDS.some((c) => cmd.startsWith(c));
 
   if (isDangerous && confirm) {
     process.stdout.write(`\n⚠️  Run "${cmd}"? (y/n): `);
-    const ans = await new Promise(r => process.stdin.once('data', r));
+    const ans = await new Promise((r) => process.stdin.once('data', r));
     if (ans.toString().trim().toLowerCase() !== 'y') {
       return 'Cancelled.';
     }
@@ -1342,9 +1616,9 @@ async function runShellCommand(cmd, confirm = true) {
   return new Promise((resolve) => {
     const proc = spawn(cmd, { shell: true });
     let out = '';
-    proc.stdout.on('data', d => out += d);
-    proc.stderr.on('data', d => out += d);
-    proc.on('close', code => resolve(out || `(exit ${code})`));
+    proc.stdout.on('data', (d) => (out += d));
+    proc.stderr.on('data', (d) => (out += d));
+    proc.on('close', (code) => resolve(out || `(exit ${code})`));
   });
 }
 
@@ -1355,7 +1629,7 @@ async function runShellCommand(cmd, confirm = true) {
 async function chatLoop() {
   const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout
+    output: process.stdout,
   });
 
   await loadPersona();
@@ -1363,10 +1637,15 @@ async function chatLoop() {
 
   const askQuestion = () => {
     rl.question('\n> ', async (q) => {
-      if (!q.trim()) { askQuestion(); return; }
+      if (!q.trim()) {
+        askQuestion();
+        return;
+      }
 
       // Exit commands
-      if (['/quit', '/exit', '/q', 'bye', 'goodbye'].includes(q.toLowerCase())) {
+      if (
+        ['/quit', '/exit', '/q', 'bye', 'goodbye'].includes(q.toLowerCase())
+      ) {
         writeDailyMemory('[SESSION END]');
         console.log('\nGoodbye! Talk soon!\n');
         rl.close();
@@ -1401,7 +1680,7 @@ async function chatLoop() {
   console.log('  "Remember this important info" (vector memory)');
   console.log('  "Create a project" (background workers + TODO.md)');
   console.log('  "Connect to API" (dynamic API connectors)\n');
-  console.log('Type /quit when you\'re done.\n');
+  console.log("Type /quit when you're done.\n");
 
   askQuestion();
 }
@@ -1421,7 +1700,9 @@ async function checkOllamaAndNotify() {
   }
 
   if (health.models && health.models.length > 0) {
-    console.log(`[+] Ollama connected - ${health.models.length} models available`);
+    console.log(
+      `[+] Ollama connected - ${health.models.length} models available`,
+    );
   } else {
     console.log('[+] Ollama connected - no models installed yet');
     console.log('    To download a model: ollama pull <model-name>');
@@ -1451,13 +1732,16 @@ async function main() {
   initWorkerSystem();
   initApiConnector();
 
+  // Initialize Action Registry
+  await initActionRegistry();
+
   // Start background services
   startScheduler((job) => {
     console.log(`\n[Scheduled Task] ${job.name}\n`);
   });
 
   startHeartbeatMonitor((results) => {
-    const msg = results.map(r => `${r.label}: ${r.result}`).join(', ');
+    const msg = results.map((r) => `${r.label}: ${r.result}`).join(', ');
     console.log(`\n[Heartbeat Check] ${msg}\n`);
     writeDailyMemory(`[HEARTBEAT] ${msg}`);
   });
@@ -1472,7 +1756,9 @@ async function main() {
   if (message) {
     // Single message mode
     if (!ollamaOk) {
-      console.log('\nError: Ollama is not running. Please start Ollama first.\n');
+      console.log(
+        '\nError: Ollama is not running. Please start Ollama first.\n',
+      );
       process.exit(1);
     }
     const result = await handleNaturalLanguage(message);
