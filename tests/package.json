@@ -1,0 +1,22 @@
+{
+  "name": "static-rebel-tests",
+  "version": "1.0.0",
+  "description": "Test suite for Static Rebel AI Assistant",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js",
+    "test:lib": "node --test tests/lib/*.test.js",
+    "test:agents": "node --test tests/agents/*.test.js",
+    "test:dashboard": "node --test tests/dashboard/*.test.js",
+    "test:config": "node --test tests/lib/configManager.test.js",
+    "test:memory": "node --test tests/lib/memoryManager.test.js",
+    "test:models": "node --test tests/lib/modelRegistry.test.js",
+    "test:subagents": "node --test tests/lib/subagentManager.test.js",
+    "test:cron": "node --test tests/lib/cronScheduler.test.js",
+    "test:watch": "node --watch --test tests/**/*.test.js"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
