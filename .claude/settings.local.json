@@ -35,7 +35,8 @@
       "Bash(wc:*)",
       "Bash(grep:*)",
       "Bash(ls:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(timeout 10 npm run dev:*)"
     ]
   }
 }
