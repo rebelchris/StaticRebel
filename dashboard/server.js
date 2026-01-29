@@ -312,6 +312,10 @@ app.get('/config', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'config.html'));
 });
 
+app.get('/trackers', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'trackers.html'));
+});
+
 // Start server
 server.listen(PORT, () => {
   console.log(`Dashboard server running at http://localhost:${PORT}`);
@@ -320,6 +324,7 @@ server.listen(PORT, () => {
   console.log(`  - Personas: http://localhost:${PORT}/personas`);
   console.log(`  - Memory: http://localhost:${PORT}/memory`);
   console.log(`  - Workers: http://localhost:${PORT}/workers`);
+  console.log(`  - Trackers: http://localhost:${PORT}/trackers`);
   console.log(`  - APIs: http://localhost:${PORT}/apis`);
   console.log(`  - Chat: http://localhost:${PORT}/chat`);
   console.log(`  - Config: http://localhost:${PORT}/config`);
