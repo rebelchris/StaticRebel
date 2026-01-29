@@ -1,7 +1,7 @@
 {
-  "name": "ollama-assistant",
+  "name": "static-rebel",
   "version": "2.0.0",
-  "description": "A sophisticated AI assistant powered by local Ollama models - just talk naturally!",
+  "description": "A sophisticated AI rebel assistant powered by local Ollama models - just talk naturally!",
   "type": "module",
   "main": "assistant.js",
   "scripts": {
@@ -9,7 +9,13 @@
     "chat": "node enhanced.js",
     "enhanced": "node enhanced.js",
     "chat-cmd": "node enhanced.js",
+    "orchestrator": "node orchestrator.js",
+    "orch": "node orchestrator.js",
+    "stream": "node orchestrator.js stream",
+    "dashboard": "node dashboard/server.js",
+    "dashboard:dev": "node --watch dashboard/server.js",
     "install-db": "npm install better-sqlite3",
+    "postinstall": "cd dashboard && npm install",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -18,7 +24,8 @@
     "assistant",
     "cli",
     "local-ai",
-    "natural-language"
+    "natural-language",
+    "static-rebel"
   ],
   "author": "",
   "license": "ISC",
@@ -28,6 +35,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "node-telegram-bot-api": "^0.67.0",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "ws": "^8.18.0"
   }
 }

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Ollama Assistant</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/" class="sidebar-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          Ollama Assistant
+        </a>
+      </div>
+      <nav>
+        <ul class="sidebar-nav">
+          <li><a href="/" class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Dashboard
+          </a></li>
+          <li><a href="/personas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Personas
+          </a></li>
+          <li><a href="/memory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Memory
+          </a></li>
+          <li><a href="/workers">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+            Workers
+          </a></li>
+          <li><a href="/apis">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 20V10"/>
+              <path d="M12 20V4"/>
+              <path d="M6 20v-6"/>
+            </svg>
+            APIs
+          </a></li>
+          <li><a href="/chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Chat
+          </a></li>
+          <li><a href="/config">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Config
+          </a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">System Overview</h1>
+        <p class="page-subtitle">Real-time status of your Ollama Assistant</p>
+      </div>
+
+      <div class="action-bar">
+        <div class="connection-status">
+          <span class="status-dot online" id="connection-dot"></span>
+          <span id="connection-text">Connected</span>
+        </div>
+        <div class="uptime" id="uptime">Uptime: --</div>
+      </div>
+
+      <div class="grid grid-4" id="stats-grid">
+        <!-- Stats will be loaded here -->
+      </div>
+
+      <div class="grid grid-2" style="margin-top: 30px;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Active Persona</h3>
+            <a href="/personas" class="btn btn-sm btn-secondary">Manage</a>
+          </div>
+          <div id="active-persona">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">System Resources</h3>
+          </div>
+          <div id="system-resources">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top: 20px;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Recent Tasks</h3>
+            <a href="/workers" class="btn btn-sm btn-secondary">View All</a>
+          </div>
+          <div id="recent-tasks">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Available Models</h3>
+          </div>
+          <div id="available-models">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { api, statusApi, personaApi, workersApi } from '/js/api.js';
+    import { format, toast, initPage } from '/js/shared.js';
+
+    initPage('dashboard');
+
+    const statsGrid = document.getElementById('stats-grid');
+    const activePersonaEl = document.getElementById('active-persona');
+    const systemResourcesEl = document.getElementById('system-resources');
+    const recentTasksEl = document.getElementById('recent-tasks');
+    const availableModelsEl = document.getElementById('available-models');
+    const uptimeEl = document.getElementById('uptime');
+
+    async function loadDashboard() {
+      try {
+        const status = await statusApi.getStatus();
+        updateStats(status);
+        updateActivePersona(status.personas);
+        updateSystemResources(status.system);
+        updateRecentTasks(status.workers.recent);
+        updateAvailableModels(status.models);
+        uptimeEl.textContent = `Uptime: ${format.uptime(status.uptime)}`;
+      } catch (error) {
+        console.error('Failed to load dashboard:', error);
+        toast.error('Failed to load dashboard data');
+      }
+    }
+
+    function updateStats(status) {
+      const stats = [
+        {
+          label: 'Personas',
+          value: status.personas?.stats?.total || 0,
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
+        },
+        {
+          label: 'Memories',
+          value: status.memory?.vector?.totalMemories || 0,
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>'
+        },
+        {
+          label: 'Active Tasks',
+          value: status.workers?.stats?.running || 0,
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>'
+        },
+        {
+          label: 'Connectors',
+          value: status.connectors?.stats?.totalConnectors || 0,
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>'
+        }
+      ];
+
+      statsGrid.innerHTML = stats.map(stat => `
+        <div class="stat-card">
+          <div class="stat-icon">${stat.icon}</div>
+          <div class="stat-content">
+            <div class="stat-value">${stat.value}</div>
+            <div class="stat-label">${stat.label}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateActivePersona(personas) {
+      if (!personas?.active) {
+        activePersonaEl.innerHTML = '<p class="text-muted">No active persona</p>';
+        return;
+      }
+
+      const p = personas.active;
+      activePersonaEl.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold;">
+            ${p.name?.charAt(0) || 'C'}
+          </div>
+          <div>
+            <h4 style="font-size: 1.1rem; margin-bottom: 4px;">${p.name || 'Unknown'}</h4>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">${p.role || 'Assistant'}</p>
+            <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+              ${(p.baseTraits || []).map(trait => `<span class="badge badge-primary">${trait}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateSystemResources(system) {
+      if (!system) {
+        systemResourcesEl.innerHTML = '<p class="text-muted">No data available</p>';
+        return;
+      }
+
+      systemResourcesEl.innerHTML = `
+        <div style="display: grid; gap: 12px;">
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+            <span style="color: var(--text-secondary);">Platform</span>
+            <span>${system.platform || 'Unknown'} (${system.arch || 'Unknown'})</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+            <span style="color: var(--text-secondary);">CPUs</span>
+            <span>${system.cpus || 0} cores</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+            <span style="color: var(--text-secondary);">Total Memory</span>
+            <span>${system.totalMemory || 'Unknown'}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+            <span style="color: var(--text-secondary);">Free Memory</span>
+            <span>${system.freeMemory || 'Unknown'}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateRecentTasks(tasks) {
+      if (!tasks || tasks.length === 0) {
+        recentTasksEl.innerHTML = '<p class="text-muted">No recent tasks</p>';
+        return;
+      }
+
+      const taskClasses = {
+        pending: 'badge-warning',
+        running: 'badge-info',
+        completed: 'badge-success',
+        failed: 'badge-danger',
+        cancelled: 'badge-danger'
+      };
+
+      recentTasksEl.innerHTML = `
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Status</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tasks.slice(0, 5).map(task => `
+                <tr>
+                  <td>
+                    <div style="font-weight: 500;">${task.name || 'Untitled'}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${task.type || 'general'}</div>
+                  </td>
+                  <td><span class="badge ${taskClasses[task.status] || 'badge-primary'}">${task.status || 'unknown'}</span></td>
+                  <td style="font-size: 0.85rem; color: var(--text-secondary);">${format.relativeTime(task.createdAt)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function updateAvailableModels(models) {
+      if (!models || !models.available || models.available.length === 0) {
+        availableModelsEl.innerHTML = '<p class="text-muted">No models available</p>';
+        return;
+      }
+
+      availableModelsEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          ${models.available.map(model => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--bg-tertiary); border-radius: 6px;">
+              <span style="font-family: monospace; font-size: 0.9rem;">${model}</span>
+              ${model === models.defaults?.general ? '<span class="badge badge-success">Default</span>' : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Listen for real-time updates
+    api.on('status', (data) => {
+      updateStats(data);
+      uptimeEl.textContent = `Uptime: ${format.uptime(data.uptime)}`;
+    });
+
+    api.on('personaChanged', () => {
+      loadDashboard();
+    });
+
+    // Initial load
+    loadDashboard();
+  </script>
+</body>
+</html>

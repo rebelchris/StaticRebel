@@ -10,9 +10,9 @@ import { loadSessionMemory, writeDailyMemory, initMemory, readLongTermMemory } f
 import { loadModelRegistry, getModelForTask, detectTaskType, chatCompletion, listAvailableModels, parseModelRef, getDefaultModel } from '../../lib/modelRegistry.js';
 import { createSubagent, sendToSubagent, createCodingSubagent, createAnalysisSubagent } from '../../lib/subagentManager.js';
 
-const CONFIG_DIR = path.join(os.homedir(), '.ollama-assistant', 'config');
+const CONFIG_DIR = path.join(os.homedir(), '.static-rebel', 'config');
 const SOUL_FILE = path.join(CONFIG_DIR, 'SOUL.md');
-const PROFILE_FILE = path.join(os.homedir(), '.ollama-assistant-profile.md');
+const PROFILE_FILE = path.join(os.homedir(), '.static-rebel-profile.md');
 
 // Base system prompt
 const BASE_SYSTEM_PROMPT = `You are Charlize—a sophisticated, elegant AI assistant with dry wit and grounded wisdom.

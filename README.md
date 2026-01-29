@@ -1,17 +1,11 @@
-# Ollama AI Assistant
+# StaticRebel
 
 A Node.js CLI AI assistant powered by your local Ollama installation.
-
-## Prerequisites
-
-- Node.js 18+
-- [Ollama](https://ollama.ai/) installed and running
-- A model pulled (e.g., `ollama pull llama3.2`)
 
 ## Setup
 
 ```bash
-cd ollama-assistant
+cd static-rebel
 npm install
 ```
 

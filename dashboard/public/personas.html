@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personas - Ollama Assistant</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/" class="sidebar-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          Ollama Assistant
+        </a>
+      </div>
+      <nav>
+        <ul class="sidebar-nav">
+          <li><a href="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Dashboard
+          </a></li>
+          <li><a href="/personas" class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Personas
+          </a></li>
+          <li><a href="/memory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Memory
+          </a></li>
+          <li><a href="/workers">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+            Workers
+          </a></li>
+          <li><a href="/apis">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 20V10"/>
+              <path d="M12 20V4"/>
+              <path d="M6 20v-6"/>
+            </svg>
+            APIs
+          </a></li>
+          <li><a href="/chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Chat
+          </a></li>
+          <li><a href="/config">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Config
+          </a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Persona Manager</h1>
+        <p class="page-subtitle">Manage AI personas and adjust their behavior</p>
+      </div>
+
+      <div class="action-bar">
+        <div class="connection-status">
+          <span class="status-dot online" id="connection-dot"></span>
+          <span id="connection-text">Connected</span>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('create-persona-modal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          New Persona
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Available Personas</h3>
+        </div>
+        <div id="personas-grid" class="grid grid-3">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 20px;">
+        <div class="card-header">
+          <h3 class="card-title">Persona Details</h3>
+        </div>
+        <div id="persona-details">
+          <p class="text-muted" style="text-align: center; padding: 40px;">Select a persona to view details</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create Persona Modal -->
+  <div class="modal-overlay" id="create-persona-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Create New Persona</h3>
+        <button class="modal-close" onclick="closeModal('create-persona-modal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="create-persona-form">
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-input" name="name" required placeholder="e.g., Research Assistant">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <input type="text" class="form-input" name="role" placeholder="e.g., Research Specialist">
+          </div>
+          <div class="form-group">
+            <label class="form-label">System Prompt</label>
+            <textarea class="form-textarea" name="systemPrompt" rows="5" placeholder="Describe the persona's behavior and capabilities..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Traits (comma-separated)</label>
+            <input type="text" class="form-input" name="traits" placeholder="e.g., analytical, thorough, patient">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('create-persona-modal')">Cancel</button>
+        <button class="btn btn-primary" id="create-persona-btn">Create Persona</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback Modal -->
+  <div class="modal-overlay" id="feedback-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Adjust Persona</h3>
+        <button class="modal-close" onclick="closeModal('feedback-modal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 16px; color: var(--text-secondary);">Apply feedback to adjust the persona's behavior:</p>
+        <form id="feedback-form">
+          <input type="hidden" name="personaId" id="feedback-persona-id">
+          <div class="form-group">
+            <label class="form-label">Feedback</label>
+            <select class="form-select" name="feedback">
+              <option value="Be more concise">Be more concise</option>
+              <option value="Be more detailed">Be more detailed</option>
+              <option value="Use simpler language">Use simpler language</option>
+              <option value="Be friendlier">Be friendlier</option>
+              <option value="Focus on coding">Focus on coding</option>
+              <option value="Focus on analysis">Focus on analysis</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Or enter custom feedback:</label>
+            <input type="text" class="form-input" name="customFeedback" placeholder="e.g., Use more technical terms">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('feedback-modal')">Cancel</button>
+        <button class="btn btn-primary" id="apply-feedback-btn">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, personaApi } from '/js/api.js';
+    import { format, toast, initPage, setLoading } from '/js/shared.js';
+
+    initPage('personas');
+
+    let currentPersonas = [];
+    let activePersonaId = null;
+
+    const personasGrid = document.getElementById('personas-grid');
+    const personaDetails = document.getElementById('persona-details');
+    const createBtn = document.getElementById('create-persona-btn');
+    const applyFeedbackBtn = document.getElementById('apply-feedback-btn');
+
+    async function loadPersonas() {
+      try {
+        const { personas, activeId } = await personaApi.getAll();
+        currentPersonas = personas;
+        activePersonaId = activeId;
+        renderPersonas(personas, activeId);
+      } catch (error) {
+        console.error('Failed to load personas:', error);
+        toast.error('Failed to load personas');
+      }
+    }
+
+    function renderPersonas(personas, activeId) {
+      if (!personas || personas.length === 0) {
+        personasGrid.innerHTML = '<p class="text-muted">No personas available</p>';
+        return;
+      }
+
+      personasGrid.innerHTML = personas.map(p => `
+        <div class="persona-card ${p.id === activeId ? 'active' : ''}" data-id="${p.id}">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1rem;">
+              ${p.name?.charAt(0) || 'C'}
+            </div>
+            <div>
+              <h4>${p.name || 'Unknown'}</h4>
+              <p style="font-size: 0.8rem; color: var(--text-secondary);">${p.role || 'Assistant'}</p>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+            ${(p.baseTraits || []).slice(0, 3).map(t => `<span class="badge badge-primary">${t}</span>`).join('')}
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-primary flex: 1" onclick="event.stopPropagation(); activatePersona('${p.id}')">
+              ${p.id === activeId ? 'Active' : 'Activate'}
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); showFeedbackModal('${p.id}')">
+              Adjust
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      // Add click handlers for details
+      personasGrid.querySelectorAll('.persona-card').forEach(card => {
+        card.addEventListener('click', () => showPersonaDetails(card.dataset.id));
+      });
+    }
+
+    function showPersonaDetails(id) {
+      const persona = currentPersonas.find(p => p.id === id);
+      if (!persona) return;
+
+      personaDetails.innerHTML = `
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 300px;">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+              <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; font-weight: bold;">
+                ${persona.name?.charAt(0) || 'C'}
+              </div>
+              <div>
+                <h3 style="margin-bottom: 4px;">${persona.name || 'Unknown'}</h3>
+                <p style="color: var(--text-secondary);">${persona.role || 'Assistant'}</p>
+                ${persona.id === activePersonaId ? '<span class="badge badge-success" style="margin-top: 8px;">Active</span>' : ''}
+              </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 8px;">TRAITS</h4>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                ${(persona.baseTraits || []).map(t => `<span class="badge badge-primary">${t}</span>`).join('')}
+              </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 8px;">SPECIALTIES</h4>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                ${(persona.specialties || []).map(s => `<span class="badge badge-info">${s}</span>`).join('')}
+              </div>
+            </div>
+
+            <div>
+              <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 8px;">METADATA</h4>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">
+                <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                  <span>ID:</span>
+                  <code>${persona.id}</code>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                  <span>Created:</span>
+                  <span>${format.datetime(persona.createdAt)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                  <span>Updated:</span>
+                  <span>${format.datetime(persona.updatedAt)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 300px;">
+            <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 8px;">SYSTEM PROMPT</h4>
+            <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; font-size: 0.9rem; line-height: 1.6; max-height: 400px; overflow-y: auto;">
+              ${persona.systemPrompt || 'No system prompt defined'}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function activatePersona(id) {
+      try {
+        await personaApi.activate(id);
+        toast.success('Persona activated');
+        loadPersonas();
+      } catch (error) {
+        toast.error('Failed to activate persona');
+      }
+    }
+
+    function showFeedbackModal(id) {
+      document.getElementById('feedback-persona-id').value = id;
+      openModal('feedback-modal');
+    }
+
+    // Create persona
+    createBtn.addEventListener('click', async () => {
+      const form = document.getElementById('create-persona-form');
+      const formData = new FormData(form);
+      const data = {
+        name: formData.get('name'),
+        role: formData.get('role'),
+        systemPrompt: formData.get('systemPrompt'),
+        traits: formData.get('traits')?.split(',').map(t => t.trim()).filter(t => t) || []
+      };
+
+      setLoading(createBtn, true);
+      try {
+        await personaApi.create(data);
+        toast.success('Persona created successfully');
+        closeModal('create-persona-modal');
+        form.reset();
+        loadPersonas();
+      } catch (error) {
+        toast.error('Failed to create persona');
+      } finally {
+        setLoading(createBtn, false);
+      }
+    });
+
+    // Apply feedback
+    applyFeedbackBtn.addEventListener('click', async () => {
+      const id = document.getElementById('feedback-persona-id').value;
+      const customFeedback = document.querySelector('[name="customFeedback"]').value;
+      const feedback = customFeedback || document.querySelector('[name="feedback"]').value;
+
+      setLoading(applyFeedbackBtn, true);
+      try {
+        const result = await personaApi.applyFeedback(id, feedback);
+        toast.success(result.message || 'Feedback applied');
+        closeModal('feedback-modal');
+        loadPersonas();
+      } catch (error) {
+        toast.error('Failed to apply feedback');
+      } finally {
+        setLoading(applyFeedbackBtn, false);
+      }
+    });
+
+    // Listen for real-time updates
+    api.on('personaChanged', () => loadPersonas());
+    api.on('personaUpdated', () => loadPersonas());
+    api.on('personaCreated', () => loadPersonas());
+
+    // Initial load
+    loadPersonas();
+  </script>
+</body>
+</html>

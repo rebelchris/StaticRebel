@@ -6,7 +6,7 @@ import os from 'os';
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 const MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
 const VISION_MODEL = process.env.VISION_MODEL || 'llava';
-const TRACKERS_DIR = path.join(os.homedir(), '.ollama-assistant', 'trackers');
+const TRACKERS_DIR = path.join(os.homedir(), '.static-rebel', 'trackers');
 const TRACKERS_REGISTRY = path.join(TRACKERS_DIR, 'trackers.json');
 
 // ============================================================================

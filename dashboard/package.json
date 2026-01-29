@@ -1,7 +1,7 @@
 {
-  "name": "ollama-assistant-dashboard",
+  "name": "static-rebel-dashboard",
   "version": "1.0.0",
-  "description": "Web Dashboard for Ollama Assistant",
+  "description": "Web Dashboard for StaticRebel",
   "main": "server.js",
   "type": "module",
   "scripts": {

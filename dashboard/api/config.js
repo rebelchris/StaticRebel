@@ -204,7 +204,7 @@ router.get('/export', async (req, res) => {
 function getDefaultConfigStructure() {
   return {
     meta: {
-      name: 'ollama-assistant',
+      name: 'static-rebel',
       version: '2026.1.28-1'
     },
     ollama: {

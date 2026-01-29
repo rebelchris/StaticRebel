@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workers - Ollama Assistant</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/" class="sidebar-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          Ollama Assistant
+        </a>
+      </div>
+      <nav>
+        <ul class="sidebar-nav">
+          <li><a href="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Dashboard
+          </a></li>
+          <li><a href="/personas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Personas
+          </a></li>
+          <li><a href="/memory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Memory
+          </a></li>
+          <li><a href="/workers" class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+            Workers
+          </a></li>
+          <li><a href="/apis">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 20V10"/>
+              <path d="M12 20V4"/>
+              <path d="M6 20v-6"/>
+            </svg>
+            APIs
+          </a></li>
+          <li><a href="/chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Chat
+          </a></li>
+          <li><a href="/config">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Config
+          </a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Task Queue</h1>
+        <p class="page-subtitle">Manage background tasks and workers</p>
+      </div>
+
+      <div class="grid grid-4" id="stats-grid">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+
+      <div class="action-bar" style="margin-top: 20px;">
+        <div class="tabs" style="margin-bottom: 0;">
+          <button class="tab active" data-filter="all">All</button>
+          <button class="tab" data-filter="pending">Pending</button>
+          <button class="tab" data-filter="running">Running</button>
+          <button class="tab" data-filter="completed">Completed</button>
+          <button class="tab" data-filter="failed">Failed</button>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('create-task-modal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          New Task
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Tasks</h3>
+          <span id="task-count" style="color: var(--text-secondary); font-size: 0.9rem;">Loading...</span>
+        </div>
+        <div id="tasks-list">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create Task Modal -->
+  <div class="modal-overlay" id="create-task-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Create New Task</h3>
+        <button class="modal-close" onclick="closeModal('create-task-modal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="create-task-form">
+          <div class="form-group">
+            <label class="form-label">Task Name</label>
+            <input type="text" class="form-input" name="name" required placeholder="e.g., Research AI trends">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Task Type</label>
+            <select class="form-select" name="type">
+              <option value="general">General</option>
+              <option value="research">Research</option>
+              <option value="code">Code</option>
+              <option value="websearch">Web Search</option>
+              <option value="process">Process</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select class="form-select" name="priority">
+              <option value="low">Low</option>
+              <option value="normal" selected>Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Payload (JSON)</label>
+            <textarea class="form-textarea" name="payload" rows="3" placeholder='{"key": "value"}'></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('create-task-modal')">Cancel</button>
+        <button class="btn btn-primary" id="create-task-btn">Create Task</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, workersApi } from '/js/api.js';
+    import { format, toast, initPage, setLoading, getPriorityClass, getStatusClass } from '/js/shared.js';
+
+    initPage('workers');
+
+    const statsGrid = document.getElementById('stats-grid');
+    const tasksList = document.getElementById('tasks-list');
+    const taskCount = document.getElementById('task-count');
+    const createTaskBtn = document.getElementById('create-task-btn');
+    let currentFilter = 'all';
+    let allTasks = [];
+
+    async function loadStats() {
+      try {
+        const { stats } = await workersApi.getAll();
+        renderStats(stats);
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+      }
+    }
+
+    function renderStats(stats) {
+      statsGrid.innerHTML = `
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">${stats.totalTasks || 0}</div>
+            <div class="stat-label">Total Tasks</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: white;">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">${stats.pending || 0}</div>
+            <div class="stat-label">Pending</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: white;">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">${stats.running || 0}</div>
+            <div class="stat-label">Running</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: white;">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">${stats.completed || 0}</div>
+            <div class="stat-label">Completed</div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function loadTasks() {
+      tasksList.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+      try {
+        const { tasks } = await workersApi.getAll();
+        allTasks = tasks;
+        renderTasks(tasks);
+      } catch (error) {
+        console.error('Failed to load tasks:', error);
+        tasksList.innerHTML = '<p class="text-muted" style="text-align: center; padding: 40px;">Failed to load tasks</p>';
+      }
+    }
+
+    function renderTasks(tasks) {
+      const filtered = currentFilter === 'all'
+        ? tasks
+        : tasks.filter(t => t.status === currentFilter);
+
+      taskCount.textContent = `${filtered.length} of ${tasks.length} tasks`;
+
+      if (filtered.length === 0) {
+        tasksList.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+            <h3>No tasks found</h3>
+            <p>${currentFilter === 'all' ? 'Create your first task to get started' : `No ${currentFilter} tasks`}</p>
+          </div>
+        `;
+        return;
+      }
+
+      tasksList.innerHTML = `
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Type</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(task => `
+                <tr>
+                  <td>
+                    <div style="font-weight: 500;">${task.name || 'Untitled'}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">ID: ${task.id}</div>
+                  </td>
+                  <td><span class="badge badge-info">${task.type || 'general'}</span></td>
+                  <td><span class="badge ${getPriorityClass(task.priority)}">${task.priority || 'normal'}</span></td>
+                  <td>
+                    <span class="badge ${getStatusClass(task.status)}">
+                      <span class="status-dot ${task.status === 'running' ? 'running' : ''}"></span>
+                      ${task.status || 'pending'}
+                    </span>
+                  </td>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div class="progress" style="width: 60px;">
+                        <div class="progress-bar" style="width: ${task.progress || 0}%"></div>
+                      </div>
+                      <span style="font-size: 0.8rem;">${task.progress || 0}%</span>
+                    </div>
+                  </td>
+                  <td style="font-size: 0.85rem; color: var(--text-secondary);">${format.relativeTime(task.createdAt)}</td>
+                  <td>
+                    ${task.status === 'pending' ? `
+                      <button class="btn btn-sm btn-danger" onclick="cancelTask('${task.id}')">Cancel</button>
+                    ` : ''}
+                    ${task.status === 'failed' ? `
+                      <button class="btn btn-sm btn-primary" onclick="retryTask('${task.id}')">Retry</button>
+                    ` : ''}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    // Create task
+    createTaskBtn.addEventListener('click', async () => {
+      const form = document.getElementById('create-task-form');
+      const formData = new FormData(form);
+
+      let payload = {};
+      try {
+        const payloadStr = formData.get('payload').trim();
+        if (payloadStr) {
+          payload = JSON.parse(payloadStr);
+        }
+      } catch (e) {
+        toast.error('Invalid JSON payload');
+        return;
+      }
+
+      const taskData = {
+        name: formData.get('name'),
+        type: formData.get('type'),
+        priority: formData.get('priority'),
+        payload
+      };
+
+      setLoading(createTaskBtn, true);
+      try {
+        await workersApi.create(taskData);
+        toast.success('Task created');
+        closeModal('create-task-modal');
+        form.reset();
+        loadStats();
+        loadTasks();
+      } catch (error) {
+        toast.error('Failed to create task');
+      } finally {
+        setLoading(createTaskBtn, false);
+      }
+    });
+
+    // Cancel task
+    window.cancelTask = async (id) => {
+      if (!confirm('Are you sure you want to cancel this task?')) return;
+
+      try {
+        await workersApi.cancel(id);
+        toast.success('Task cancelled');
+        loadStats();
+        loadTasks();
+      } catch (error) {
+        toast.error('Failed to cancel task');
+      }
+    };
+
+    // Retry task
+    window.retryTask = async (id) => {
+      try {
+        await workersApi.retry(id);
+        toast.success('Task queued for retry');
+        loadStats();
+        loadTasks();
+      } catch (error) {
+        toast.error('Failed to retry task');
+      }
+    };
+
+    // Tab filters
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentFilter = tab.dataset.filter;
+        renderTasks(allTasks);
+      });
+    });
+
+    // Listen for real-time updates
+    api.on('taskCreated', () => {
+      loadStats();
+      loadTasks();
+    });
+    api.on('taskCancelled', () => {
+      loadStats();
+      loadTasks();
+    });
+    api.on('taskRetried', () => {
+      loadStats();
+      loadTasks();
+    });
+
+    // Initial load
+    loadStats();
+    loadTasks();
+  </script>
+</body>
+</html>

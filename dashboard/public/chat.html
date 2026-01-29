@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat - Ollama Assistant</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/" class="sidebar-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          Ollama Assistant
+        </a>
+      </div>
+      <nav>
+        <ul class="sidebar-nav">
+          <li><a href="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Dashboard
+          </a></li>
+          <li><a href="/personas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Personas
+          </a></li>
+          <li><a href="/memory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Memory
+          </a></li>
+          <li><a href="/workers">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+            Workers
+          </a></li>
+          <li><a href="/apis">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 20V10"/>
+              <path d="M12 20V4"/>
+              <path d="M6 20v-6"/>
+            </svg>
+            APIs
+          </a></li>
+          <li><a href="/chat" class="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Chat
+          </a></li>
+          <li><a href="/config">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Config
+          </a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Chat Interface</h1>
+        <p class="page-subtitle">Chat with your AI assistant</p>
+      </div>
+
+      <div class="grid grid-4" id="persona-selector" style="margin-bottom: 20px;">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Conversation</h3>
+          <button class="btn btn-sm btn-secondary" onclick="clearHistory()">Clear History</button>
+        </div>
+        <div class="chat-container">
+          <div class="chat-messages" id="chat-messages">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <h3>Start a conversation</h3>
+              <p>Type a message below to begin chatting</p>
+            </div>
+          </div>
+          <div class="chat-input-container">
+            <input type="text" class="form-input" id="chat-input" placeholder="Type your message..." autocomplete="off">
+            <button class="btn btn-primary" id="send-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+              Send
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 20px;">
+        <div class="card-header">
+          <h3 class="card-title">Quick Commands</h3>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+          <button class="btn btn-sm btn-secondary" onclick="sendQuickCommand('status')">System Status</button>
+          <button class="btn btn-sm btn-secondary" onclick="sendQuickCommand('time')">Current Time</button>
+          <button class="btn btn-sm btn-secondary" onclick="sendQuickCommand('uptime')">Uptime</button>
+          <button class="btn btn-sm btn-secondary" onclick="sendQuickCommand('persona')">Active Persona</button>
+          <button class="btn btn-sm btn-secondary" onclick="sendQuickCommand('memory stats')">Memory Stats</button>
+          <button class="btn btn-sm btn-secondary" onclick="sendQuickCommand('help')">Help</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { api, chatApi, personaApi } from '/js/api.js';
+    import { format, toast, initPage, setLoading } from '/js/shared.js';
+
+    initPage('chat');
+
+    const chatMessages = document.getElementById('chat-messages');
+    const chatInput = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const personaSelector = document.getElementById('persona-selector');
+    let activePersona = null;
+    let isSending = false;
+
+    async function loadPersonas() {
+      try {
+        const { active, available } = await chatApi.getPersona();
+        activePersona = active;
+
+        personaSelector.innerHTML = available.map(p => `
+          <div class="persona-card ${p.id === active?.id ? 'active' : ''}" data-id="${p.id}" onclick="selectPersona('${p.id}')">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9rem;">
+                ${p.name?.charAt(0) || 'C'}
+              </div>
+              <div>
+                <h4 style="font-size: 0.9rem;">${p.name || 'Unknown'}</h4>
+                <p style="font-size: 0.75rem; color: var(--text-muted);">${p.role || ''}</p>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        console.error('Failed to load personas:', error);
+      }
+    }
+
+    window.selectPersona = async (id) => {
+      try {
+        await personaApi.activate(id);
+        toast.success('Persona switched');
+        loadPersonas();
+      } catch (error) {
+        toast.error('Failed to switch persona');
+      }
+    };
+
+    function addMessage(content, role = 'assistant') {
+      const avatar = role === 'user'
+        ? chatMessages.children.length % 2 === 0 ? 'U' : 'A'
+        : (activePersona?.name?.charAt(0) || 'A');
+
+      const messageHtml = `
+        <div class="chat-message ${role}">
+          <div class="chat-message-avatar">${avatar}</div>
+          <div class="chat-message-content">${content}</div>
+        </div>
+      `;
+
+      // Remove empty state if present
+      const emptyState = chatMessages.querySelector('.empty-state');
+      if (emptyState) {
+        emptyState.remove();
+      }
+
+      chatMessages.insertAdjacentHTML('beforeend', messageHtml);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const message = chatInput.value.trim();
+      if (!message || isSending) return;
+
+      chatInput.value = '';
+      isSending = true;
+      setLoading(sendBtn, true);
+
+      // Add user message
+      addMessage(message, 'user');
+
+      try {
+        const result = await chatApi.send(message, activePersona?.id);
+
+        // Add assistant response
+        addMessage(result.response, 'assistant');
+
+        // Refresh personas in case they changed
+        loadPersonas();
+      } catch (error) {
+        console.error('Send failed:', error);
+        addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
+        toast.error('Failed to send message');
+      } finally {
+        isSending = false;
+        setLoading(sendBtn, false);
+      }
+    }
+
+    window.sendQuickCommand = async (command) => {
+      chatInput.value = command;
+      sendMessage();
+    };
+
+    window.clearHistory = async () => {
+      if (!confirm('Clear chat history?')) return;
+
+      try {
+        await chatApi.clearHistory();
+        chatMessages.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <h3>Start a conversation</h3>
+            <p>Type a message below to begin chatting</p>
+          </div>
+        `;
+        toast.success('Chat history cleared');
+      } catch (error) {
+        toast.error('Failed to clear history');
+      }
+    };
+
+    // Event listeners
+    sendBtn.addEventListener('click', sendMessage);
+
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Listen for real-time updates
+    api.on('chatMessage', (data) => {
+      if (data.assistant) {
+        activePersona = { name: data.persona || activePersona?.name };
+        addMessage(data.assistant, 'assistant');
+      }
+    });
+
+    api.on('personaChanged', () => {
+      loadPersonas();
+    });
+
+    // Initial load
+    loadPersonas();
+  </script>
+</body>
+</html>

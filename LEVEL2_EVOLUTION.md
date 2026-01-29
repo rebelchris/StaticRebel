@@ -1,6 +1,6 @@
 # Level 2 AI Assistant - Evolution Roadmap
 
-This document describes the Phase 1-3 implementation of the Level 2 Ollama Assistant.
+This document describes the Phase 1-3 implementation of the StaticRebel Assistant.
 
 ## Phase 1: The "Identity" Layer (Personas & Memory)
 
@@ -55,7 +55,7 @@ Usage:
 
 ### Project Structure Created
 ```
-~/.ollama-assistant/
+~/.static-rebel/
 ├── workers/          # Worker scripts
 ├── tasks/            # Task definitions
 └── logs/             # Worker logs
@@ -87,7 +87,7 @@ Usage:
 ## System Architecture
 
 ```
-ollama-assistant/
+static-rebel/
 ├── lib/
 │   ├── personaManager.js    # Phase 1: Dynamic Personas
 │   ├── vectorMemory.js      # Phase 1: Semantic Memory
@@ -119,11 +119,11 @@ ollama-assistant/
 
 ## Configuration
 
-Personas stored at: `~/.ollama-assistant/personas/`
-Vector memories at: `~/.ollama-assistant/vector-memory/`
-Tasks at: `~/.ollama-assistant/tasks/`
-API connectors at: `~/.ollama-assistant/api-connectors/`
-API keys at: `~/.ollama-assistant/api-keys.json`
+Personas stored at: `~/.static-rebel/personas/`
+Vector memories at: `~/.static-rebel/vector-memory/`
+Tasks at: `~/.static-rebel/tasks/`
+API connectors at: `~/.static-rebel/api-connectors/`
+API keys at: `~/.static-rebel/api-keys.json`
 
 ## Future Enhancements
 

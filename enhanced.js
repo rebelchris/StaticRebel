@@ -41,8 +41,30 @@ import {
 import {
   initApiConnector, createConnector, getAllConnectors, getApiStats, storeApiKey
 } from './lib/apiConnector.js';
+import { routeTask, orchestrate, streamOllama, runClaudeCode } from './orchestrator.js';
+import { research, webResearch, streamResearch } from './lib/webOracle.js';
 
-const PROFILE_FILE = path.join(os.homedir(), '.ollama-assistant-profile.md');
+const PROFILE_FILE = path.join(os.homedir(), '.static-rebel-profile.md');
+
+// ============================================================================
+// Dashboard Server
+// ============================================================================
+
+async function startDashboard() {
+  console.log('Starting Dashboard Server...');
+
+  try {
+    // Dynamic import to avoid requiring dashboard dependencies in main package
+    const dashboardPath = path.join(__dirname, 'dashboard', 'server.js');
+    const { default: dashboard } = await import(dashboardPath);
+    return dashboard;
+  } catch (error) {
+    console.error('Failed to start dashboard:', error.message);
+    console.log('\nTo use the dashboard, please install dashboard dependencies:');
+    console.log('  cd dashboard && npm install\n');
+    process.exit(1);
+  }
+}
 
 // ============================================================================
 // Intent Detection & Natural Language Understanding
@@ -109,6 +131,14 @@ const INTENT_PATTERNS = {
     /search (for |the )(web|internet)/i
   ],
 
+  // Web Oracle - Deep research queries
+  research: [
+    /research/i, /look into/i, /investigate/i,
+    /find out about/i, /tell me about (the )?(latest|new)/i,
+    /what'?s the (latest|new) on/i, /hot topic/i,
+    /trending/i, /current state of/i
+  ],
+
   // Shell Commands
   run: [
     /run (a )?(command|shell)/i, /execute/i, /terminal/i, /bash/i
@@ -162,6 +192,14 @@ const INTENT_PATTERNS = {
     /connect (to |an )?api/i, /api (connector|integration)/i,
     /new (api|integration)/i, /store (api|api key)/i,
     /dynamic (api|connector)/i, /webhook/i
+  ],
+
+  // Level 3: Orchestrator (Claude Code CLI + Streaming)
+  orchestrator: [
+    /use claude code/i, /spawn claude/i, /run claude cli/i,
+    /orchestrate/i, /dual stream/i, /streaming response/i,
+    /complex coding/i, /deep refactor/i, /full codebase/i,
+    /claude.*task/i, /advanced debugging/i, /architecture review/i
   ]
 };
 
@@ -213,6 +251,8 @@ async function handleNaturalLanguage(input) {
       return await handleSkillsRequest();
     case 'search':
       return await handleWebSearch(input);
+    case 'research':
+      return await handleResearchRequest(input);
     case 'run':
       return await handleRunRequest(input);
     case 'track':
@@ -226,6 +266,9 @@ async function handleNaturalLanguage(input) {
       return await handleWorkerRequest(input);
     case 'api':
       return handleApiRequest(input);
+    // Level 3: Orchestrator
+    case 'orchestrator':
+      return await handleOrchestratorRequest(input);
     case 'help':
       return handleHelp();
     default:
@@ -402,7 +445,7 @@ async function handleRunRequest(input) {
 
 // ---------- Help ----------
 function handleHelp() {
-  return `I'm Charlize, your Level 2 AI assistant! Just talk to me naturally:\n\n` +
+  return `I'm Charlize, your Level 3 AI assistant! Just talk to me naturally:\n\n` +
     `**Scheduling**\n"Remind me to stretch every hour"\n"Schedule a daily summary at 9am"\n"Set a reminder for Monday at 3pm"\n\n` +
 
     `**Tasks & Delegation**\n"Write a function to sort an array"\n"Create a React component for a button"\n"Analyze the pros and cons of these options"\n"Think about whether I should use SQL or NoSQL"\n\n` +
@@ -413,11 +456,70 @@ function handleHelp() {
 
     `**Level 2 Features**\n"Be more concise" - Adjust my personality\n"Remember this information" - Store in vector memory\n"Create a project" - Generate TODO.md with background tasks\n"Connect to API" - Set up dynamic API connectors\n\n` +
 
+    `**Level 3: Web Oracle (Research)**\n"Research the latest AI developments"\n"Investigate climate change technologies"\n"What's new in quantum computing?"\n"Research Rust vs C++ performance"\n\n` +
+
+    `**Level 3: Orchestrator (Claude Code)**\n"Debug this complex bug in my codebase"\n"Refactor the entire project structure"\n"Do a full architecture review"\n"Use claude code for a complete rewrite"\n\n` +
+
     `**Current Information**\n"Search for latest AI news"\n"What's new in tech?"\n"What's happening today?"\n\n` +
 
     `**Quick Info**\n"What models do I have?"\n"Show me my scheduled tasks"\n\n` +
 
     `Just say what you need - I'll figure it out!`;
+}
+
+// ---------- Orchestrator Handler (Level 3) ----------
+async function handleOrchestratorRequest(input) {
+  const task = input
+    .replace(/use claude code|spawn claude|run claude cli|orchestrate|dual stream|streaming response|complex coding|deep refactor|full codebase|claude.*task|advanced debugging|architecture review/gi, '')
+    .trim();
+
+  if (!task) {
+    return `**Orchestrator - Claude Code CLI + Streaming**
+
+I can delegate complex tasks to Claude Code CLI for powerful coding assistance.
+
+Try:
+- "Debug this complex issue in my codebase"
+- "Refactor the entire project structure"
+- "Do a full architecture review"
+- "Advanced debugging with trace logs"
+
+Or use direct mode:
+- "Use claude code to fix this bug"
+- "Spawn claude for a complete rewrite"
+`;
+  }
+
+  // Determine the best route
+  const route = routeTask(task);
+  console.log(`\n[ORCHESTRATOR] Task: "${task.substring(0, 50)}..."`);
+  console.log(`[ORCHESTRATOR] Route: ${route}\n`);
+
+  // Route to appropriate handler
+  if (route === 'ollama') {
+    process.stdout.write('[OLLAMA] ');
+    for await (const token of streamOllama(task)) {
+      if (token.type === 'token') {
+        process.stdout.write(token.content);
+      } else if (token.type === 'thinking') {
+        console.log(`\n[${token.source.toUpperCase()}] ${token.content}`);
+      } else if (token.type === 'done') {
+        console.log('\n[OLLAMA] Done\n');
+      }
+    }
+    return '';
+  } else if (route === 'claude-code') {
+    try {
+      await runClaudeCode(task);
+      return '';
+    } catch (error) {
+      return `[Claude Code Error] ${error.message}`;
+    }
+  } else {
+    // Orchestrate - use both
+    console.log('[ORCHESTRATOR] Running with both Ollama and Claude Code in parallel...\n');
+    return `I've dispatched your task to both local Ollama and Claude Code CLI for comprehensive assistance. Check the output above!`;
+  }
 }
 
 // ---------- Tracking ----------
@@ -1032,6 +1134,39 @@ async function handleWebSearch(input) {
     `\n\n_${results.length} results found_`;
 }
 
+// ---------- Web Oracle Research Handler ----------
+async function handleResearchRequest(input) {
+  const query = input
+    .replace(/research|look into|investigate|find out about|tell me about|what's the|whats the|latest|hot topic|trending|current state of/gi, '')
+    .trim()
+    .replace(/^(on |about |the )/, '');
+
+  if (!query) {
+    return `**Web Oracle - Research Tool**
+
+I can research any topic for you using web search.
+
+Try:
+- "Research the latest AI developments"
+- "Investigate climate change technologies"
+- "What's new in quantum computing?"
+- "Research Rust vs C++ performance"
+- "Find out about GPT-5 rumors"
+
+I'll search the web and provide comprehensive results with sources.
+`;
+  }
+
+  console.log(`\n[WEB ORACLE] Researching: "${query}"...`);
+
+  try {
+    const result = await research(query);
+    return result;
+  } catch (error) {
+    return `[Research Error] ${error.message}`;
+  }
+}
+
 const SAFE_COMMANDS = new Set(['ls', 'cat', 'head', 'tail', 'pwd', 'date', 'echo', 'git status', 'git log --oneline']);
 
 async function runShellCommand(cmd, confirm = true) {
@@ -1118,6 +1253,13 @@ async function chatLoop() {
 
 async function main() {
   const args = process.argv.slice(2);
+
+  // Check for dashboard flag
+  if (args.includes('--dashboard') || args.includes('-d')) {
+    await startDashboard();
+    return;
+  }
+
   const message = args.join(' ');
 
   // Initialize

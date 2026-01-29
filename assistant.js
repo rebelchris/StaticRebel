@@ -47,16 +47,16 @@ const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 const MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
 const VISION_MODEL = process.env.VISION_MODEL || 'llava';
-const MEMORY_FILE = path.join(os.homedir(), '.ollama-assistant', 'memory', 'daily');
-const PROFILE_FILE = process.env.PROFILE_FILE || path.join(os.homedir(), '.ollama-assistant-profile.md');
+const MEMORY_FILE = path.join(os.homedir(), '.static-rebel', 'memory', 'daily');
+const PROFILE_FILE = process.env.PROFILE_FILE || path.join(os.homedir(), '.static-rebel-profile.md');
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '30000');
 const VERBOSE = process.env.VERBOSE === 'true';
-const SKILLS_DIR = path.join(os.homedir(), '.ollama-assistant', 'skills');
-const WORKSPACES_DIR = path.join(os.homedir(), '.ollama-assistant', 'workspaces');
-const TRACKERS_DIR = path.join(os.homedir(), '.ollama-assistant', 'trackers');
-const CONFIG_DIR = path.join(os.homedir(), '.ollama-assistant', 'config');
+const SKILLS_DIR = path.join(os.homedir(), '.static-rebel', 'skills');
+const WORKSPACES_DIR = path.join(os.homedir(), '.static-rebel', 'workspaces');
+const TRACKERS_DIR = path.join(os.homedir(), '.static-rebel', 'trackers');
+const CONFIG_DIR = path.join(os.homedir(), '.static-rebel', 'config');
 
 // Persona: Charlize (inspired by the actress - sophisticated, elegant, witty)
 const BASE_SYSTEM_PROMPT = `You are Charlize—a sophisticated, elegant AI assistant with dry wit and grounded wisdom.

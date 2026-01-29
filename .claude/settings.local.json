@@ -25,10 +25,11 @@
       "Bash(printf:*)",
       "Bash(unzip:*)",
       "Bash(ollama --help)",
-      "Bash(ls -la /Users/charlizebongers/ollama-assistant/*.js)",
+      "Bash(ls -la *.js)",
       "Bash(git init)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(test -f /Users/charlizebongers/ollama-assistant/lib/scraper.js)"
     ]
   }
 }
