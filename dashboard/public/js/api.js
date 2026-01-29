@@ -221,6 +221,20 @@ export const configApi = {
   export: () => api.get('/config/export'),
 };
 
+// Trackers API
+export const trackersApi = {
+  getAll: () => api.get('/trackers'),
+  getByName: (name) => api.get(`/trackers/${name}`),
+  getStats: (name, period = 'week') =>
+    api.get(`/trackers/${name}/stats?period=${period}`),
+  getHistory: (name, limit = 50) =>
+    api.get(`/trackers/${name}/history?limit=${limit}`),
+  create: (data) => api.post('/trackers', data),
+  delete: (name) => api.delete(`/trackers/${name}`),
+  addRecord: (name, data) => api.post(`/trackers/${name}/records`, data),
+  getTypes: () => api.get('/trackers/types/list'),
+};
+
 // Health check
 export const healthApi = {
   check: () => api.get('/health'),

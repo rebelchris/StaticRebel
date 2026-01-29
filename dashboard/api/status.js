@@ -12,20 +12,69 @@ const router = express.Router();
 
 // Import backend modules (lazy loading)
 let personaManager, vectorMemory, workerManager, apiConnector, configManager;
-let modelRegistry, memoryManager, subagentManager, skillsManager;
+let modelRegistry, memoryManager, subagentManager, skillsManager, trackerModule;
 
 async function loadModules() {
   if (personaManager) return;
   try {
-    const personaPath = path.join(__dirname, '..', '..', 'lib', 'personaManager.js');
-    const vectorPath = path.join(__dirname, '..', '..', 'lib', 'vectorMemory.js');
-    const workerPath = path.join(__dirname, '..', '..', 'lib', 'workerManager.js');
+    const personaPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'personaManager.js',
+    );
+    const vectorPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'vectorMemory.js',
+    );
+    const workerPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'workerManager.js',
+    );
     const apiPath = path.join(__dirname, '..', '..', 'lib', 'apiConnector.js');
-    const configPath = path.join(__dirname, '..', '..', 'lib', 'configManager.js');
-    const modelPath = path.join(__dirname, '..', '..', 'lib', 'modelRegistry.js');
-    const memoryPath = path.join(__dirname, '..', '..', 'lib', 'memoryManager.js');
-    const subagentPath = path.join(__dirname, '..', '..', 'lib', 'subagentManager.js');
-    const skillsPath = path.join(__dirname, '..', '..', 'lib', 'skillsManager.js');
+    const configPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'configManager.js',
+    );
+    const modelPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'modelRegistry.js',
+    );
+    const memoryPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'memoryManager.js',
+    );
+    const subagentPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'subagentManager.js',
+    );
+    const skillsPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'skillsManager.js',
+    );
+    const trackerPath = path.join(__dirname, '..', '..', 'tracker.js');
 
     const personaModule = await import(personaPath);
     personaManager = personaModule;
@@ -53,6 +102,12 @@ async function loadModules() {
 
     const skillsModule = await import(skillsPath);
     skillsManager = skillsModule;
+
+    try {
+      trackerModule = await import(trackerPath);
+    } catch (e) {
+      // Tracker module may not be available
+    }
   } catch (error) {
     console.error('Error loading modules:', error.message);
   }
@@ -69,30 +124,34 @@ router.get('/', async (req, res) => {
       personas: {
         active: null,
         available: [],
-        stats: { total: 0 }
+        stats: { total: 0 },
       },
       memory: {
         vector: { total: 0, byType: {} },
-        daily: { recent: [] }
+        daily: { recent: [] },
       },
       workers: {
         stats: { total: 0, pending: 0, running: 0, completed: 0, failed: 0 },
-        recent: []
+        recent: [],
       },
       connectors: {
-        stats: { total: 0, active: 0 }
+        stats: { total: 0, active: 0 },
+      },
+      trackers: {
+        stats: { total: 0, byType: {} },
+        list: [],
       },
       models: {
         available: [],
-        defaults: {}
+        defaults: {},
       },
       system: {
         platform: os.platform(),
         arch: os.arch(),
         cpus: os.cpus().length,
         totalMemory: Math.round(os.totalmem() / (1024 * 1024 * 1024)) + ' GB',
-        freeMemory: Math.round(os.freemem() / (1024 * 1024 * 1024)) + ' GB'
-      }
+        freeMemory: Math.round(os.freemem() / (1024 * 1024 * 1024)) + ' GB',
+      },
     };
 
     // Get active persona
@@ -152,8 +211,22 @@ router.get('/', async (req, res) => {
         status.models.defaults = {
           general: configManager.getConfig('models.defaults.general'),
           coding: configManager.getConfig('models.defaults.coding'),
-          analysis: configManager.getConfig('models.defaults.analysis')
+          analysis: configManager.getConfig('models.defaults.analysis'),
         };
+      }
+    } catch (e) {}
+
+    // Get tracker stats
+    try {
+      if (trackerModule?.TrackerStore) {
+        const store = new trackerModule.TrackerStore();
+        const trackers = store.listTrackers();
+        status.trackers.list = trackers;
+        status.trackers.stats.total = trackers.length;
+        status.trackers.stats.byType = trackers.reduce((acc, t) => {
+          acc[t.type] = (acc[t.type] || 0) + 1;
+          return acc;
+        }, {});
       }
     } catch (e) {}
 
@@ -175,7 +248,7 @@ router.get('/overview', async (req, res) => {
       taskCount: 0,
       connectorCount: 0,
       modelsAvailable: 0,
-      uptime: process.uptime()
+      uptime: process.uptime(),
     };
 
     try {
@@ -199,13 +272,16 @@ router.get('/overview', async (req, res) => {
 
     try {
       if (apiConnector?.getApiStats) {
-        overview.connectorCount = apiConnector.getApiStats().totalConnectors || 0;
+        overview.connectorCount =
+          apiConnector.getApiStats().totalConnectors || 0;
       }
     } catch (e) {}
 
     try {
       if (modelRegistry?.listAvailableModels) {
-        overview.modelsAvailable = (modelRegistry.listAvailableModels() || []).length;
+        overview.modelsAvailable = (
+          modelRegistry.listAvailableModels() || []
+        ).length;
       }
     } catch (e) {}
 
