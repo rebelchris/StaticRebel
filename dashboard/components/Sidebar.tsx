@@ -10,6 +10,7 @@ import {
   Settings,
   Menu,
   X,
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
@@ -19,6 +20,7 @@ const navigation = [
   { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'Memory', href: '/memory', icon: Brain },
   { name: 'Trackers', href: '/trackers', icon: Activity },
+  { name: 'Logs', href: '/logs', icon: FileText },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
