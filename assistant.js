@@ -27,6 +27,7 @@ import {
   getConfig,
   saveConfig,
   resolvePath,
+  clearConfigCache,
 } from './lib/configManager.js';
 import {
   initMemory,
@@ -1086,6 +1087,12 @@ function safeJsonParse(str, fallback = null) {
 // ============================================================================
 
 async function webSearch(query, limit = 5) {
+  // Web search temporarily disabled - requires API configuration
+  console.log('🔍 Web search is temporarily disabled.');
+  console.log('To enable, configure TAVILY_API_KEY or SEARXNG_URL in your .env file');
+  return [];
+
+  /* Original DuckDuckGo implementation disabled
   return new Promise((resolve) => {
     // Use DuckDuckGo HTML search
     const encodedQuery = encodeURIComponent(query);
@@ -1193,6 +1200,7 @@ async function webSearch(query, limit = 5) {
     });
     req.end();
   });
+  */
 }
 
 async function webFetch(url) {
@@ -5129,12 +5137,14 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
 let telegramBot = null;
 let lastActivity = Date.now();
 let isCliActive = true;
+let currentTelegramToken = null;
 
 // Helper function to download files from Telegram
 async function downloadTelegramFile(bot, fileId) {
   try {
     const file = await bot.getFile(fileId);
-    const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${file.file_path}`;
+    const tokenToUse = currentTelegramToken || TELEGRAM_TOKEN;
+    const downloadUrl = `https://api.telegram.org/file/bot${tokenToUse}/${file.file_path}`;
     const tempPath = path.join(
       os.tmpdir(),
       `telegram_img_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
@@ -5166,7 +5176,13 @@ async function downloadTelegramFile(bot, fileId) {
 }
 
 async function startTelegramBot() {
-  if (!TELEGRAM_TOKEN) {
+  // Get token from config or environment variable
+  const config = loadConfig();
+  const tokenFromConfig = config.telegram?.botToken;
+  const tokenToUse = tokenFromConfig || TELEGRAM_TOKEN;
+  const isEnabled = config.telegram?.enabled !== false; // Default to true if not explicitly disabled
+
+  if (!tokenToUse) {
     if (VERBOSE)
       console.log(
         '\x1b[90m  [Telegram: TELEGRAM_TOKEN not set, skipping]\x1b[0m\n',
@@ -5174,9 +5190,33 @@ async function startTelegramBot() {
     return null;
   }
 
+  if (!isEnabled) {
+    if (VERBOSE)
+      console.log(
+        '\x1b[90m  [Telegram: disabled in config, skipping]\x1b[0m\n',
+      );
+    return null;
+  }
+
+  // If bot is already running with the same token, don't restart
+  if (telegramBot && currentTelegramToken === tokenToUse) {
+    return telegramBot;
+  }
+
+  // Stop existing bot if token changed
+  if (telegramBot && currentTelegramToken !== tokenToUse) {
+    console.log('\x1b[33m  [Telegram: token changed, restarting bot...]\x1b[0m\n');
+    try {
+      telegramBot.stopPolling();
+      telegramBot = null;
+    } catch (e) {
+      console.log(`\x1b[90m  [Telegram: error stopping old bot: ${e.message}]\x1b[0m\n`);
+    }
+  }
+
   // Show masked token for debugging
   const maskedToken =
-    TELEGRAM_TOKEN.slice(0, 8) + '...' + TELEGRAM_TOKEN.slice(-5);
+    tokenToUse.slice(0, 8) + '...' + tokenToUse.slice(-5);
   console.log(
     `\x1b[33m  [Telegram: connecting with token ${maskedToken}...]\x1b[0m\n`,
   );
@@ -5184,7 +5224,8 @@ async function startTelegramBot() {
   try {
     const TelegramBot = (await import('node-telegram-bot-api')).default;
 
-    telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+    telegramBot = new TelegramBot(tokenToUse, { polling: true });
+    currentTelegramToken = tokenToUse;
 
     // Verify connection
     const me = await telegramBot.getMe();
@@ -5678,6 +5719,35 @@ function startIdleTracker() {
   });
 }
 
+// Watch for config changes and restart Telegram bot if needed
+function watchTelegramConfig() {
+  setInterval(async () => {
+    // Clear config cache to get fresh config from disk
+    clearConfigCache();
+
+    const config = loadConfig();
+    const tokenFromConfig = config.telegram?.botToken;
+    const tokenToUse = tokenFromConfig || TELEGRAM_TOKEN;
+
+    // Check if token changed or bot needs to be started/stopped
+    const isEnabled = config.telegram?.enabled && tokenToUse;
+
+    if (isEnabled && (!telegramBot || currentTelegramToken !== tokenToUse)) {
+      console.log('\x1b[33m  [Telegram: config changed, updating bot...]\x1b[0m\n');
+      await startTelegramBot();
+    } else if (!isEnabled && telegramBot) {
+      console.log('\x1b[33m  [Telegram: disabled in config, stopping bot...]\x1b[0m\n');
+      try {
+        telegramBot.stopPolling();
+        telegramBot = null;
+        currentTelegramToken = null;
+      } catch (e) {
+        console.log(`\x1b[90m  [Telegram: error stopping bot: ${e.message}]\x1b[0m\n`);
+      }
+    }
+  }, 5000); // Check every 5 seconds
+}
+
 // Main
 async function main() {
   // Start Telegram bot
@@ -5685,6 +5755,9 @@ async function main() {
 
   // Start idle tracker
   startIdleTracker();
+
+  // Start config watcher for Telegram
+  watchTelegramConfig();
 
   // Start CLI chat
   await chat();

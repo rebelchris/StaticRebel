@@ -36,37 +36,13 @@ export default {
   dependencies: [],
 
   async handler(input, context, params) {
-    const query = input
-      .replace(/search|look up|find|what's new|latest|google|web|internet/i, '')
-      .trim()
-      .replace(/^(for |the )/, '');
-
-    if (!query) {
-      return 'What would you like me to search for? Try: "Search for latest AI news"';
-    }
-
-    const results = await webSearch(query);
-
-    if (results.length === 0) {
-      return `No results found for "${query}". Try a different search term.`;
-    }
-
-    return (
-      `**Web Search: ${query}**\n\n` +
-      results
-        .slice(0, 5)
-        .map((r, i) => {
-          const url = r.url ? `\n   ${r.url}` : '';
-          return `${i + 1}. ${r.title}${url}`;
-        })
-        .join('\n\n') +
-      `\n\n_${results.length} results found_`
-    );
+    return '🔍 Web search is temporarily disabled.\n\nTo enable web search, configure one of:\n\n1. **Tavily API** (Recommended):\n   - Get API key: https://tavily.com/\n   - Add to .env: TAVILY_API_KEY=your-key\n\n2. **Self-hosted SearxNG**:\n   - Install: https://searxng.github.io/searxng/\n   - Add to .env: SEARXNG_URL=http://localhost:8080\n\nLocal Ollama models cannot perform web searches directly.';
   },
 
   source: 'builtin',
-  enabled: true,
+  enabled: false,
   createdAt: '2026-01-29',
+  disabledReason: 'Web search temporarily disabled - requires TAVILY_API_KEY or SEARXNG to be configured',
 };
 
 // Web search implementation using DuckDuckGo

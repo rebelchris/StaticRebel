@@ -71,6 +71,7 @@ I'll search the web and provide comprehensive results with sources.`;
   },
 
   source: 'builtin',
-  enabled: true,
+  enabled: false,
   createdAt: '2026-01-29',
+  disabledReason: 'Web research temporarily disabled - requires TAVILY_API_KEY or SEARXNG to be configured',
 };

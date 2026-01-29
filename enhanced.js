@@ -1526,6 +1526,10 @@ async function webSearch(query) {
 }
 
 async function handleWebSearch(input) {
+  // Web search temporarily disabled - requires API configuration
+  return `🔍 Web search is temporarily disabled.\n\nTo enable web search, configure one of:\n\n1. **Tavily API** (Recommended):\n   - Get API key: https://tavily.com/\n   - Add to .env: TAVILY_API_KEY=your-key\n\n2. **Self-hosted SearxNG**:\n   - Install: https://searxng.github.io/searxng/\n   - Add to .env: SEARXNG_URL=http://localhost:8080\n\nNote: Local Ollama models cannot perform web searches directly.`;
+
+  /* Original implementation disabled
   const query = input
     .replace(/search|look up|find|what's new|latest|google|web|internet/i, '')
     .trim()
@@ -1588,6 +1592,7 @@ I'll search the web and provide comprehensive results with sources.
   } catch (error) {
     return `[Research Error] ${error.message}`;
   }
+  */
 }
 
 const SAFE_COMMANDS = new Set([
