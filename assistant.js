@@ -1751,6 +1751,124 @@ async function askWithMemory(userMessage, systemPrompt) {
 }
 
 // ============================================================================
+// Intelligent Auto-Tracking System
+// ============================================================================
+
+/**
+ * Detects trackable data in user input and automatically:
+ * 1. Identifies if the message contains trackable information
+ * 2. Infers what type of tracker is needed
+ * 3. Checks if a suitable tracker exists
+ * 4. Auto-creates one if missing
+ * 5. Logs the data
+ */
+async function detectAndRouteTrackableData(userInput) {
+  try {
+    // Skip if it's a question or command
+    const isQuestion = /\?|^(how|what|when|where|why|who|which|can you|could you|would you|do you|does|is|are|will|show me|tell me)/i.test(userInput);
+    if (isQuestion || userInput.startsWith('/') || userInput.startsWith('@')) {
+      return null;
+    }
+
+    // Step 1: Use Ollama to detect if this contains trackable data
+    const detectionPrompt = `Analyze this user statement and determine if it contains data that should be tracked (like food, exercise, sleep, habits, mood, water intake, medication, etc.):
+
+"${userInput}"
+
+Respond with ONLY valid JSON:
+{
+  "trackable": true/false,
+  "trackerType": "nutrition|workout|sleep|habit|mood|hydration|medication|custom",
+  "description": "brief description of what tracker this needs",
+  "confidence": 0.0-1.0
+}
+
+Examples:
+- "I had a coffee with 150 calories" -> {trackable: true, trackerType: "nutrition", description: "nutrition tracker for food and drinks"}
+- "Just finished a 5k run" -> {trackable: true, trackerType: "workout", description: "workout tracker for exercise"}
+- "Slept 7 hours last night" -> {trackable: true, trackerType: "sleep", description: "sleep tracker"}
+- "What's the weather?" -> {trackable: false}`;
+
+    const detectionResponse = await askOllama([
+      { role: 'system', content: 'You are a data classifier. Output only valid JSON.' },
+      { role: 'user', content: detectionPrompt }
+    ]);
+
+    const detectionContent = detectionResponse.message?.content;
+    const detection = JSON.parse(detectionContent.match(/\{[\s\S]*\}/)?.[0] || '{}');
+
+    // If not trackable or low confidence, skip
+    if (!detection.trackable || detection.confidence < 0.6) {
+      return null;
+    }
+
+    const trackStore = new TrackerStore();
+    const trackers = trackStore.listTrackers();
+
+    // Step 2: Check if a suitable tracker already exists
+    const matchingTracker = trackers.find(t =>
+      t.type === detection.trackerType ||
+      (detection.trackerType === 'nutrition' && (t.type === 'food' || t.type === 'nutrition')) ||
+      (detection.trackerType === 'workout' && t.type === 'workout')
+    );
+
+    let targetTracker = matchingTracker;
+
+    // Step 3: Auto-create tracker if it doesn't exist
+    if (!targetTracker) {
+      console.log(`  \x1b[36m[Auto-creating ${detection.trackerType} tracker...]\x1b[0m`);
+
+      const trackerConfig = await parseTrackerFromNaturalLanguage(detection.description);
+      if (!trackerConfig) {
+        return null;
+      }
+
+      // Don't ask for confirmation - just create it automatically
+      const result = trackStore.createTracker(trackerConfig);
+      if (!result.success) {
+        return null;
+      }
+
+      targetTracker = trackerConfig;
+      console.log(`  \x1b[32m[Created tracker: @${trackerConfig.name}]\x1b[0m`);
+    }
+
+    // Step 4: Parse and log the data
+    const parsed = await parseRecordFromText(
+      targetTracker.name,
+      userInput,
+      targetTracker.type
+    );
+
+    if (!parsed.success || !parsed.data || Object.keys(parsed.data).length === 0) {
+      return null;
+    }
+
+    const result = trackStore.addRecord(targetTracker.name, {
+      data: parsed.data,
+      source: 'auto-detect'
+    });
+
+    if (result.success) {
+      console.log(`  \x1b[36m[Logged to @${targetTracker.name}]\x1b[0m`);
+      return {
+        tracker: targetTracker,
+        data: parsed.data,
+        created: !matchingTracker
+      };
+    }
+
+    return null;
+  } catch (e) {
+    // Silently fail - don't disrupt the conversation
+    if (VERBOSE) {
+      console.log(`  \x1b[90m[Auto-track error: ${e.message}]\x1b[0m`);
+    }
+    return null;
+  }
+}
+
+// ============================================================================
 // Main Chat
 // ============================================================================
 
@@ -3677,15 +3795,49 @@ Respond with JSON containing a "data" object with the extracted values.`;
             effectiveSystemPrompt = `${systemPrompt}\n\n---\n\n[ACTIVE SKILL: ${skillMatch.skill.name}]\n${skillMatch.skill.system_prompt}`;
           }
 
-          // Add tracker context so AI knows about available trackers
+          // Add tracker context so AI knows about available trackers and recent data
           try {
             const trackStore = new TrackerStore();
+            const queryEngine = new QueryEngine();
             const trackers = trackStore.listTrackers();
+
             if (trackers.length > 0) {
               const trackerList = trackers
-                .map((t) => `- @${t.name}: ${t.displayName} (${t.type})`)
+                .map((t) => {
+                  // Get today's stats for this tracker
+                  const stats = queryEngine.getStats(t.name, 'today');
+                  const recordCount = stats.records?.length || 0;
+
+                  let summary = `- @${t.name}: ${t.displayName} (${t.type}) - ${recordCount} entries today`;
+
+                  // Add key metrics summary if available
+                  if (stats.metrics && Object.keys(stats.metrics).length > 0) {
+                    const metricSummary = Object.entries(stats.metrics)
+                      .map(([key, values]) => {
+                        if (values.total !== undefined) {
+                          return `${key}=${values.total}`;
+                        }
+                        return null;
+                      })
+                      .filter(Boolean)
+                      .slice(0, 3)
+                      .join(', ');
+                    if (metricSummary) {
+                      summary += ` (${metricSummary})`;
+                    }
+                  }
+
+                  return summary;
+                })
                 .join('\n');
-              effectiveSystemPrompt += `\n\n<USER TRACKERS>\nThe user has the following trackers available:\n${trackerList}\n\nWhen user mentions workouts, fitness, nutrition, sleep, or habits, you can reference their trackers. They can use @trackerName to interact with specific trackers (e.g., "@matt how am I doing?" or "@matt I did a workout today").\n</USER TRACKERS>`;
+
+              effectiveSystemPrompt += `\n\n<USER TRACKERS>\nThe user has the following trackers available:\n${trackerList}\n\nWhen the user mentions trackable data (like food, workouts, sleep, etc.), the system automatically detects and logs it to the appropriate tracker. If no suitable tracker exists, one will be created automatically.
+
+IMPORTANT: When answering questions about tracked data (like "how many calories today?"), use the stats shown above to provide accurate answers. The system tracks this data automatically, so you can reference these numbers confidently.
+
+Users can also explicitly interact with trackers using @trackerName (e.g., "@matt how am I doing?" or "@matt stats").\n</USER TRACKERS>`;
+            } else {
+              effectiveSystemPrompt += `\n\n<USER TRACKERS>\nThe user doesn't have any trackers yet. When they mention trackable data (like "I had coffee", "finished a workout", "slept 8 hours"), the system will automatically create an appropriate tracker and log the data. You don't need to tell them to create trackers - just acknowledge their input naturally.\n</USER TRACKERS>`;
             }
           } catch (e) {
             // Ignore tracker errors
@@ -3748,69 +3900,17 @@ Respond with JSON containing a "data" object with the extracted values.`;
             reactToEvent('memory_stored');
           }
 
-          // Auto-detect and log workout statements
-          const workoutTriggers = [
-            /i (did|completed|finished|just did|just completed|had|went to|just went to)/i,
-            /(F45|crossfit|cross\.fit|gym|workout|session|race)/i,
-            /(ran|cycled|swam|lifted|trained)/i,
-            /miles?|km|reps|sets/i,
-            /(morning|afternoon|evening) workout/i,
-          ];
-
-          if (workoutTriggers.some((p) => p.test(q))) {
-            try {
-              const trackStore = new TrackerStore();
-              const trackers = trackStore.listTrackers();
-              const workoutTracker = trackers.find((t) => t.type === 'workout');
-
-              if (workoutTracker) {
-                // Parse the workout text
-                const parsed = await parseRecordFromText(
-                  workoutTracker.name,
-                  q,
-                  'workout',
-                );
-
-                if (
-                  parsed.success &&
-                  parsed.data &&
-                  Object.keys(parsed.data).length > 0
-                ) {
-                  const result = trackStore.addRecord(workoutTracker.name, {
-                    data: parsed.data,
-                    source: 'auto-detect',
-                  });
-
-                  if (result.success) {
-                    console.log(`  \x1b[36m[Workout logged]\x1b[0m\n`);
-                    reactToEvent('workout_logged');
-                  }
-                } else {
-                  // Even if parsing fails, log a basic workout entry
-                  const basicResult = trackStore.addRecord(
-                    workoutTracker.name,
-                    {
-                      data: {
-                        exercise: 'Workout',
-                        notes: q,
-                        duration: null,
-                        sets: null,
-                        reps: null,
-                        weight: null,
-                      },
-                      source: 'auto-detect',
-                    },
-                  );
-
-                  if (basicResult.success) {
-                    console.log(`  \x1b[36m[Workout logged]\x1b[0m\n`);
-                    reactToEvent('workout_logged');
-                  }
-                }
+          // Intelligent auto-tracking for any trackable data
+          try {
+            const trackingResult = await detectAndRouteTrackableData(q);
+            if (trackingResult) {
+              if (trackingResult.tracker.type === 'workout') {
+                reactToEvent('workout_logged');
               }
-            } catch (e) {
-              // Silently fail - don't disrupt the conversation
+              // You can add more event reactions based on tracker type
             }
+          } catch (e) {
+            // Silently fail - don't disrupt the conversation
           }
         }
       } catch (error) {
