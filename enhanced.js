@@ -19,7 +19,7 @@ import https from 'https';
 import { spawn } from 'child_process';
 import { loadConfig } from './lib/configManager.js';
 import { initMemory, getMemoryStats, readDailyMemory, readLongTermMemory, getRecentDailyMemories, writeDailyMemory, curateMemory } from './lib/memoryManager.js';
-import { listAvailableModels, getModelForTask, chatCompletion, getDefaultModel } from './lib/modelRegistry.js';
+import { listAvailableModels, getModelForTask, chatCompletion, getDefaultModel, checkOllamaConnection } from './lib/modelRegistry.js';
 import { startScheduler, listCronJobs, addCronJob, describeCron, getNextRunTime, getSchedulerStatus, deleteCronJob, toggleCronJob } from './lib/cronScheduler.js';
 import { startHeartbeatMonitor, getHeartbeatStatus, configureHeartbeat } from './lib/heartbeatManager.js';
 import { listSubagents, createCodingSubagent, createAnalysisSubagent, sendToSubagent, getSubagentStats, terminateSubagent } from './lib/subagentManager.js';
@@ -1251,6 +1251,26 @@ async function chatLoop() {
 // Main
 // ============================================================================
 
+async function checkOllamaAndNotify() {
+  const health = await checkOllamaConnection();
+
+  if (!health.connected) {
+    console.log('\n[!] Ollama Connection Issue\n');
+    console.log(health.errorMessage);
+    console.log('\n');
+    return false;
+  }
+
+  if (health.models && health.models.length > 0) {
+    console.log(`[+] Ollama connected - ${health.models.length} models available`);
+  } else {
+    console.log('[+] Ollama connected - no models installed yet');
+    console.log('    To download a model: ollama pull <model-name>');
+    console.log('    Recommended: ollama pull qwen3-coder\n');
+  }
+  return true;
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -1283,8 +1303,19 @@ async function main() {
     writeDailyMemory(`[HEARTBEAT] ${msg}`);
   });
 
+  // Check Ollama connection early
+  const ollamaOk = await checkOllamaAndNotify();
+  if (!ollamaOk && !message) {
+    // In interactive mode, still allow startup but warn user
+    console.log('Starting in limited mode - some features may not work.\n');
+  }
+
   if (message) {
     // Single message mode
+    if (!ollamaOk) {
+      console.log('\nError: Ollama is not running. Please start Ollama first.\n');
+      process.exit(1);
+    }
     const result = await handleNaturalLanguage(message);
     if (result) {
       console.log(`\n${result}\n`);
