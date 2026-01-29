@@ -143,6 +143,83 @@ async function interactiveMode() {
 }
 
 // ============================================================================
+// Companion Manager - Advanced companion features
+// ============================================================================
+
+const companionInstances = new Map();
+
+export function showCompanion(type = 'pixie') {
+  const companion = new Companion(type);
+  companion.render();
+  return companion;
+}
+
+export function setState(companion, state) {
+  companion.setMood(state);
+  companion.render();
+}
+
+export function reactToEvent(companion, event) {
+  const eventMoods = {
+    success: 'celebrating',
+    error: 'tired',
+    thinking: 'thinking',
+    complete: 'happy',
+  };
+
+  const mood = eventMoods[event] || 'idle';
+  companion.setMood(mood);
+  companion.render();
+}
+
+export function setStats(companion, stats) {
+  // Placeholder for setting companion stats
+  companion.stats = stats;
+}
+
+export function toggleStats(companion) {
+  companion.showStats = !companion.showStats;
+  companion.render();
+}
+
+export function getAvailableCompanions() {
+  return Object.keys(COMPANIONS);
+}
+
+export function setCompanion(type) {
+  return new Companion(type);
+}
+
+export function showCompanionUI(companion) {
+  companion.render();
+}
+
+export function toggleVisibility(companion) {
+  companion.visible = !companion.visible;
+  if (companion.visible) {
+    companion.render();
+  } else {
+    console.clear();
+  }
+}
+
+export function startAnimation(companion, mood, interval = 500) {
+  companion.animationInterval = setInterval(() => {
+    companion.setMood(mood);
+    companion.render();
+  }, interval);
+}
+
+export function stopAnimation(companion) {
+  if (companion.animationInterval) {
+    clearInterval(companion.animationInterval);
+    companion.animationInterval = null;
+  }
+  companion.setMood('idle');
+  companion.render();
+}
+
+// ============================================================================
 // CLI
 // ============================================================================
 

@@ -357,4 +357,91 @@ JSON response:`;
   });
 }
 
+// ============================================================================
+// Vision Analyzer - Image analysis using vision models
+// ============================================================================
+
+export class VisionAnalyzer {
+  constructor(options = {}) {
+    this.model = options.model || VISION_MODEL;
+  }
+
+  async analyze(imagePath, prompt = 'Describe what you see in this image.') {
+    // Placeholder implementation - would integrate with vision model
+    return {
+      description: 'Vision analysis not fully implemented',
+      imagePath,
+      prompt,
+    };
+  }
+}
+
+// ============================================================================
+// Persona Chat - Chat with different personas
+// ============================================================================
+
+export class PersonaChat {
+  constructor(persona = 'default') {
+    this.persona = persona;
+    this.history = [];
+  }
+
+  async chat(message) {
+    this.history.push({ role: 'user', content: message });
+
+    // Placeholder - would integrate with actual chat
+    const response = `Response as ${this.persona}: ${message}`;
+    this.history.push({ role: 'assistant', content: response });
+    return response;
+  }
+
+  getHistory() {
+    return this.history;
+  }
+
+  clearHistory() {
+    this.history = [];
+  }
+}
+
+// ============================================================================
+// Tracker Wizard - Interactive tracker creation
+// ============================================================================
+
+export async function runTrackerWizard() {
+  // Placeholder implementation
+  console.log('Tracker wizard would start here...');
+  return {
+    name: 'New Tracker',
+    type: 'custom',
+    description: 'Created via wizard',
+  };
+}
+
+export async function confirmOrCustomizeTracker(trackerConfig) {
+  // Placeholder implementation
+  return trackerConfig;
+}
+
+// ============================================================================
+// Auto Detection - Detect tracker type from input
+// ============================================================================
+
+export function matchesAutoDetect(input) {
+  const patterns = {
+    nutrition: /calories|food|meal|ate|eaten/i,
+    workout: /workout|exercise|run|running|gym/i,
+    sleep: /sleep|bed|woke|rest/i,
+    habit: /habit|daily|routine/i,
+  };
+
+  for (const [type, pattern] of Object.entries(patterns)) {
+    if (pattern.test(input)) {
+      return type;
+    }
+  }
+
+  return null;
+}
+
 export { TrackerStore, QueryEngine };
