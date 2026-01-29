@@ -81,7 +81,7 @@ export default {
   ],
 
   async handler(input, context, params) {
-    const { getDefaultModel, chatCompletion } = context.modules;
+    const { getDefaultModel, chatCompletion } = context.modules.modelRegistry;
     const store = new TrackerStore();
     const trackers = store.listTrackers();
 

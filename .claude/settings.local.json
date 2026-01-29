@@ -32,7 +32,8 @@
       "Bash(test -f /Users/charlizebongers/ollama-assistant/lib/scraper.js)",
       "Bash(test:*)",
       "Bash(git config:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(grep:*)"
     ]
   }
 }

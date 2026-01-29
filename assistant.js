@@ -89,6 +89,7 @@ import {
   getState,
   clearState,
 } from './lib/followUpManager.js';
+import { log as logToFile } from './lib/logManager.js';
 
 // Agent modules (NEW)
 import {
@@ -5260,6 +5261,13 @@ async function startTelegramBot() {
         `\x1b[35m[Telegram IN] chat=${chatId} user=${msg.chat.first_name || 'unknown'}: ${msg.text || '(non-text)'}\x1b[0m`,
       );
 
+      // Log incoming message
+      logToFile('telegram-in', 'info', msg.text || '(non-text)', {
+        chatId,
+        user: msg.chat.first_name || 'unknown',
+        hasPhoto: !!msg.photo,
+      });
+
       // Handle photo messages (image analysis with vision)
       if (msg.photo) {
         console.log(`\x1b[36m  -> Image received, analyzing...\x1b[0m\n`);
@@ -5459,11 +5467,13 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
                     ? 'Markdown'
                     : undefined,
                 });
+                logToFile('telegram-out', 'info', analysisText.slice(0, 500), { chatId, context: 'image-analysis' });
                 console.log(`\x1b[32m  -> Image analysis sent\x1b[0m\n`);
               } else {
                 console.error(
                   `\x1b[31m  -> Background image error: Empty or invalid analysis result\x1b[0m\n`,
                 );
+                logToFile('telegram-error', 'error', 'Empty or invalid analysis result', { chatId, context: 'image-analysis' });
                 try {
                   await telegramBot.sendMessage(
                     chatId,
@@ -5475,6 +5485,7 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
               console.error(
                 `\x1b[31m  -> Background image error: ${error.message}\x1b[0m\n`,
               );
+              logToFile('telegram-error', 'error', error.message, { chatId, context: 'image-analysis-background' });
               try {
                 await telegramBot.sendMessage(
                   chatId,
@@ -5485,6 +5496,7 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
           })();
         } catch (error) {
           console.error(`\x1b[31m  -> Image error: ${error.message}\x1b[0m\n`);
+          logToFile('telegram-error', 'error', error.message, { chatId, context: 'image-processing' });
           await telegramBot.sendMessage(
             chatId,
             'Sorry, I had trouble processing that image.',
@@ -5500,18 +5512,14 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
         const arg = parts.slice(1).join(' ');
 
         if (command === '/start') {
-          await telegramBot.sendMessage(
-            chatId,
-            "Hi! I'm Charlize. Send me a message and I'll help you out. Use /help for commands.",
-            {
-              reply_to_message_id: msg.message_id,
-            },
-          );
+          const startMsg = "Hi! I'm Charlize. Send me a message and I'll help you out. Use /help for commands.";
+          await telegramBot.sendMessage(chatId, startMsg, {
+            reply_to_message_id: msg.message_id,
+          });
+          logToFile('telegram-out', 'info', startMsg, { chatId, command: '/start' });
           console.log(`\x1b[32m  -> /start sent\x1b[0m\n`);
         } else if (command === '/help') {
-          await telegramBot.sendMessage(
-            chatId,
-            `*Charlize AI Assistant Commands*
+          const helpMsg = `*Charlize AI Assistant Commands*
 
 • /track - Manage trackers (workouts, food, habits)
 • /search <query> - Web search
@@ -5525,9 +5533,12 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
 
 *Quick Actions:*
 • @trackerName - Query a tracker
-• Just chat naturally!`,
-            { reply_to_message_id: msg.message_id, parse_mode: 'Markdown' },
-          );
+• Just chat naturally!`;
+          await telegramBot.sendMessage(chatId, helpMsg, {
+            reply_to_message_id: msg.message_id,
+            parse_mode: 'Markdown',
+          });
+          logToFile('telegram-out', 'info', '/help response', { chatId, command: '/help' });
           console.log(`\x1b[32m  -> /help sent\x1b[0m\n`);
         } else if (command === '/track') {
           await telegramBot.sendMessage(
@@ -5564,6 +5575,7 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
               await telegramBot.sendMessage(chatId, 'No results found.', {
                 reply_to_message_id: msg.message_id,
               });
+              logToFile('telegram-out', 'info', 'No results found', { chatId, command: '/search', query: arg });
             } else {
               const response = results
                 .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
@@ -5576,6 +5588,7 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
                   parse_mode: 'Markdown',
                 },
               );
+              logToFile('telegram-out', 'info', `Search results: ${results.length} found`, { chatId, command: '/search', query: arg });
             }
           }
           console.log(`\x1b[32m  -> /search processed\x1b[0m\n`);
@@ -5672,20 +5685,24 @@ Respond with ONLY valid JSON with a "data" object containing extracted values.`;
         await telegramBot.sendMessage(chatId, answer, {
           reply_to_message_id: msg.message_id,
         });
+        logToFile('telegram-out', 'info', answer.slice(0, 500), { chatId });
 
         console.log(`\x1b[32m  -> Response sent\x1b[0m\n`);
       } catch (error) {
         console.error(`\x1b[31m  -> Error: ${error.message}\x1b[0m\n`);
+        logToFile('telegram-error', 'error', error.message, { chatId, context: 'main-response' });
         await telegramBot.sendMessage(chatId, 'Sorry, something went wrong.');
       }
     });
 
     telegramBot.on('error', (err) => {
       console.error(`\x1b[31m[Telegram error: ${err.message}]\x1b[0m\n`);
+      logToFile('telegram-error', 'error', err.message, { context: 'bot-error' });
     });
 
     telegramBot.on('polling_error', (err) => {
       console.error(`\x1b[31m[Polling error: ${err.message}]\x1b[0m\n`);
+      logToFile('telegram-error', 'error', err.message, { context: 'polling-error' });
     });
 
     return telegramBot;
