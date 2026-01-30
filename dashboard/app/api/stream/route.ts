@@ -1,27 +1,47 @@
 import { NextRequest } from 'next/server';
 import os from 'os';
-import path from 'path';
-
-async function loadModule(moduleName: string) {
-  try {
-    const modulePath = path.join(process.cwd(), '..', 'lib', `${moduleName}.js`);
-    return await import(modulePath);
-  } catch (error) {
-    return null;
-  }
-}
+import { getActivePersona } from '@/lib/personaManager.js';
+import { getMemoryStats } from '@/lib/vectorMemory.js';
+import { getWorkerStats } from '@/lib/workerManager.js';
 
 async function getStatus() {
-  const personaManager = await loadModule('personaManager');
-  const vectorMemory = await loadModule('vectorMemory');
-  const workerManager = await loadModule('workerManager');
+  let personaName = 'Default';
+  let memoryCount = 0;
+  let workerStats: any = { total: 0 };
+
+  try {
+    const persona = getActivePersona();
+    personaName = persona?.name || 'Default';
+  } catch (e) {
+    // Persona not available
+  }
+
+  try {
+    const memStats = getMemoryStats();
+    memoryCount = memStats?.totalMemories || 0;
+  } catch (e) {
+    // Memory stats not available
+  }
+
+  try {
+    const ws = getWorkerStats();
+    workerStats = {
+      total: ws?.totalTasks || 0,
+      pending: ws?.pending || 0,
+      running: ws?.running || 0,
+      completed: ws?.completed || 0,
+      failed: ws?.failed || 0,
+    };
+  } catch (e) {
+    // Worker stats not available
+  }
 
   return {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    persona: personaManager?.getActivePersona?.()?.name || 'Default',
-    memoryCount: vectorMemory?.getMemoryStats?.()?.total || 0,
-    workerStats: workerManager?.getWorkerStats?.() || { total: 0 },
+    persona: personaName,
+    memoryCount,
+    workerStats,
     system: {
       freeMemory: Math.round(os.freemem() / (1024 * 1024 * 1024)) + ' GB',
       loadAvg: os.loadavg()[0].toFixed(2),

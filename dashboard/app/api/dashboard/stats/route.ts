@@ -2,21 +2,10 @@ import { NextResponse } from 'next/server';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-
-// Helper to safely import lib modules
-async function loadModule(moduleName: string) {
-  try {
-    const modulePath = path.join(
-      process.cwd(),
-      '..',
-      'lib',
-      `${moduleName}.js`,
-    );
-    return await import(modulePath);
-  } catch (error) {
-    return null;
-  }
-}
+import { getActivePersona, getAvailablePersonas } from '@/lib/personaManager.js';
+import { getMemoryStats } from '@/lib/vectorMemory.js';
+import { getWorkerStats } from '@/lib/workerManager.js';
+import { TrackerStore } from '@/tracker.js';
 
 function loadUserProfile() {
   try {
@@ -129,13 +118,6 @@ function getTodayInteractionCount() {
 
 export async function GET() {
   try {
-    // Try to load modules
-    const [personaManager, vectorMemory, workerManager] = await Promise.all([
-      loadModule('personaManager'),
-      loadModule('vectorMemory'),
-      loadModule('workerManager'),
-    ]);
-
     const profile = loadUserProfile();
     const recentConversations = getRecentConversations();
     const todayInteractions = getTodayInteractionCount();
@@ -165,32 +147,48 @@ export async function GET() {
     };
 
     // Get persona info
-    if (personaManager?.getActivePersona) {
-      stats.personas.active = personaManager.getActivePersona();
+    try {
+      stats.personas.active = getActivePersona();
+      const personas = getAvailablePersonas();
+      stats.personas.available = Object.values(personas);
+      stats.personas.stats.total = Object.keys(personas).length;
+    } catch (e) {
+      // Persona manager not available
     }
 
     // Get memory stats
-    if (vectorMemory?.getMemoryStats) {
-      stats.memory.vector = vectorMemory.getMemoryStats();
+    try {
+      const memStats = getMemoryStats();
+      stats.memory.vector = {
+        total: memStats.totalMemories || 0,
+        byType: memStats.byType || {},
+      };
       stats.memoryEntries = stats.memory.vector.total;
+    } catch (e) {
+      // Memory stats not available
     }
 
     // Get worker stats
-    if (workerManager?.getWorkerStats) {
-      stats.workers.stats = workerManager.getWorkerStats();
+    try {
+      const workerStats = getWorkerStats();
+      stats.workers.stats = {
+        total: workerStats.totalTasks || 0,
+        pending: workerStats.pending || 0,
+        running: workerStats.running || 0,
+        completed: workerStats.completed || 0,
+        failed: workerStats.failed || 0,
+      };
+    } catch (e) {
+      // Worker stats not available
     }
 
     // Try to get tracker stats
     try {
-      const trackerPath = path.join(process.cwd(), '..', 'tracker.js');
-      const trackerModule = await import(trackerPath);
-      if (trackerModule?.TrackerStore) {
-        const store = new trackerModule.TrackerStore();
-        const trackers = store.listTrackers();
-        stats.trackers.list = trackers;
-        stats.trackers.stats.total = trackers.length;
-        stats.activeTrackers = trackers.length;
-      }
+      const store = new TrackerStore();
+      const trackers = store.listTrackers();
+      stats.trackers.list = trackers;
+      stats.trackers.stats.total = trackers.length;
+      stats.activeTrackers = trackers.length;
     } catch (e) {
       // Tracker not available
     }

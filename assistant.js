@@ -432,7 +432,10 @@ async function runClaudeSubagent(task, workspace = null, options = {}) {
   return new Promise(async (resolve, reject) => {
     try {
       // Import the claude subagent module
-      const { claudeInDir } = await import(`file://${CLAUDE_SUBAGENT_BIN}`);
+      // Use eval to prevent webpack from parsing the dynamic import
+      const loadModule = eval('(async (p) => { const m = await import("file://" + p); return m; })');
+      const mod = await loadModule(CLAUDE_SUBAGENT_BIN);
+      const { claudeInDir } = mod;
 
       console.log(`\n  [Claude Code in: ${workspaceDir}]`);
 

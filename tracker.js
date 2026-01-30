@@ -60,6 +60,8 @@ class TrackerStore {
     tracker.id = tracker.id || `tracker-${Date.now()}`;
     tracker.createdAt = new Date().toISOString();
     tracker.updatedAt = tracker.createdAt;
+    // Ensure displayName is set
+    tracker.displayName = tracker.displayName || tracker.name || 'Tracker';
     registry.trackers.push(tracker);
     this.saveRegistry(registry);
     return tracker;
@@ -142,6 +144,14 @@ class TrackerStore {
    */
   getRecords(trackerId) {
     return this.loadRecords(trackerId);
+  }
+
+  /**
+   * Get entries for a tracker (alias for getRecords for dashboard compatibility)
+   */
+  getEntries(trackerId) {
+    const data = this.loadRecords(trackerId);
+    return data.records || [];
   }
 
   /**
@@ -256,6 +266,7 @@ Provide a concise, helpful answer based on the data. If you need to calculate to
 
 /**
  * Parse a record from natural language text
+ * @returns {Object} { success: boolean, data: Object }
  */
 export async function parseRecordFromText(text, trackerType) {
   const prompt = `Parse the following text into a structured record for a ${trackerType} tracker.
@@ -265,12 +276,13 @@ Text: "${text}"
 Respond with ONLY a JSON object containing the parsed fields. Example formats:
 - For nutrition: {"food": "chicken salad", "calories": 450, "meal": "lunch"}
 - For workout: {"exercise": "running", "duration": 30, "distance": "5km"}
+- For workout pushups: {"exercise": "pushups", "count": 50}
 - For habit: {"habit": "meditation", "completed": true, "notes": "felt good"}
 - For sleep: {"hours": 7.5, "quality": "good", "bedtime": "23:00"}
 
 JSON response:`;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const requestBody = JSON.stringify({
       model: MODEL,
       prompt,
@@ -296,16 +308,17 @@ JSON response:`;
           try {
             const json = JSON.parse(body);
             const parsed = JSON.parse(json.response);
-            resolve(parsed);
+            // Return consistent format
+            resolve({ success: true, data: parsed });
           } catch {
-            // Fallback: return raw text as notes
-            resolve({ notes: text, parsed: false });
+            // Fallback: return empty data
+            resolve({ success: false, data: null });
           }
         });
       },
     );
 
-    req.on('error', () => resolve({ notes: text, parsed: false }));
+    req.on('error', () => resolve({ success: false, data: null }));
     req.write(requestBody);
     req.end();
   });

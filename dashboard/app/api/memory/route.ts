@@ -1,29 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
-
-async function loadModule(moduleName: string) {
-  try {
-    const modulePath = path.join(process.cwd(), '..', 'lib', `${moduleName}.js`);
-    return await import(modulePath);
-  } catch (error) {
-    return null;
-  }
-}
+import { getAllMemories, addMemory } from '@/lib/vectorMemory.js';
+import { getRecentDailyMemories } from '@/lib/memoryManager.js';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'daily';
 
-    const vectorMemory = await loadModule('vectorMemory');
-    const memoryManager = await loadModule('memoryManager');
-
     let memories: any[] = [];
 
-    if (type === 'vector' && vectorMemory?.getAllMemories) {
-      memories = await vectorMemory.getAllMemories({ limit: 50 });
-    } else if (memoryManager?.getRecentDailyMemories) {
-      memories = memoryManager.getRecentDailyMemories(50);
+    if (type === 'vector') {
+      try {
+        memories = await getAllMemories({ limit: 50 });
+      } catch (e) {
+        // Vector memory not available
+      }
+    } else {
+      try {
+        memories = getRecentDailyMemories(50);
+      } catch (e) {
+        // Memory manager not available
+      }
     }
 
     // Normalize memory format
@@ -50,14 +47,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Content is required' }, { status: 400 });
     }
 
-    const vectorMemory = await loadModule('vectorMemory');
-
-    if (vectorMemory?.addMemory) {
-      await vectorMemory.addMemory(content, { type });
+    try {
+      await addMemory(content, { type });
       return NextResponse.json({ success: true, message: 'Memory added' });
+    } catch (e) {
+      return NextResponse.json({ error: 'Memory system not available' }, { status: 503 });
     }
-
-    return NextResponse.json({ error: 'Memory system not available' }, { status: 503 });
   } catch (error) {
     console.error('Memory add error:', error);
     return NextResponse.json({ error: 'Failed to add memory' }, { status: 500 });

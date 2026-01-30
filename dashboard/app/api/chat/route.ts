@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
+import { getActivePersona } from '@/lib/personaManager.js';
+import { searchMemories } from '@/lib/vectorMemory.js';
+import { handleChat } from '@/lib/chatHandler.js';
 
 // In-memory chat history for this session
 let chatHistory: Array<{ role: string; content: string; timestamp: string }> = [];
 const MAX_HISTORY = 50;
-
-// Helper to safely import lib modules
-async function loadModule(moduleName: string) {
-  try {
-    const modulePath = path.join(process.cwd(), '..', 'lib', `${moduleName}.js`);
-    return await import(modulePath);
-  } catch (error) {
-    console.error(`Failed to load ${moduleName}:`, error);
-    return null;
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,19 +20,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message cannot be empty' }, { status: 400 });
     }
 
-    // Load chat handler
-    const chatHandler = await loadModule('chatHandler');
-    const personaManager = await loadModule('personaManager');
-    const vectorMemory = await loadModule('vectorMemory');
-
     // Get active persona
-    let activePersona = personaManager?.getActivePersona?.();
+    let activePersona = getActivePersona();
 
     // Search for relevant memories
     let context = '';
-    if (vectorMemory?.searchMemories && sanitizedMessage.length > 10) {
+    if (sanitizedMessage.length > 10) {
       try {
-        const memories = await vectorMemory.searchMemories(sanitizedMessage, {
+        const memories = await searchMemories(sanitizedMessage, {
           limit: 3,
           minScore: 0.2,
         });
@@ -69,31 +55,20 @@ export async function POST(request: NextRequest) {
       chatHistory = chatHistory.slice(-MAX_HISTORY);
     }
 
-    let responseText = '';
+    // Generate response using the actual chat handler
+    let responseText: string;
 
-    // Try to use chat handler
-    if (chatHandler?.handleChat) {
-      try {
-        const result = await chatHandler.handleChat(sanitizedMessage, {
-          source: 'dashboard',
-          context: {
-            user: { persona: activePersona },
-            conversation: { history: chatHistory },
-          },
-        });
-        responseText = result.content || 'I could not process your request.';
-      } catch (error) {
-        console.error('Chat handler error:', error);
-        responseText = getFallbackResponse(sanitizedMessage, activePersona);
-      }
-    } else {
-      // Fallback response
-      responseText = getFallbackResponse(sanitizedMessage, activePersona);
-    }
-
-    // Add context note if memories were found
-    if (context) {
-      responseText += '\n\n_I found some relevant memories that helped inform this response._';
+    try {
+      // Try to use the actual chat handler for AI responses
+      const result: any = await handleChat(sanitizedMessage, {
+        source: 'dashboard',
+        context: { persona: activePersona },
+      });
+      responseText = result?.content || result?.response || String(result);
+    } catch (e: any) {
+      // Fallback to simple response if chat handler fails
+      console.error('Chat handler error, using fallback:', e?.message || e);
+      responseText = generateFallbackResponse(sanitizedMessage, activePersona);
     }
 
     // Add assistant response to history
@@ -107,6 +82,7 @@ export async function POST(request: NextRequest) {
       response: responseText,
       persona: activePersona,
       history: chatHistory.slice(-10),
+      type: 'ai',
     });
   } catch (error) {
     console.error('Chat API error:', error);
@@ -129,38 +105,44 @@ export async function DELETE() {
   return NextResponse.json({ success: true, message: 'Chat history cleared' });
 }
 
-function getFallbackResponse(message: string, persona: any): string {
+function generateFallbackResponse(message: string, persona: any): string {
   const lowerMessage = message.toLowerCase();
+  const personaName = persona?.name || 'StaticRebel';
 
-  if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-    return `Hello! I'm ${persona?.name || 'your AI assistant'}. How can I help you today?`;
+  // Greetings
+  if (lowerMessage.match(/^(hi|hello|hey|good morning|good afternoon|good evening)/)) {
+    return `Hello! I'm ${personaName}. How can I help you today?`;
   }
 
-  if (lowerMessage.includes('help')) {
+  // Help request
+  if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
     return `I can help you with:
-- Answering questions
+- Answering questions and having conversations
 - Writing and debugging code
 - Managing tasks and schedules
-- Searching through memories
+- Searching through your memories
 - And much more!
 
 Just ask me anything.`;
   }
 
+  // Who are you
   if (lowerMessage.includes('who are you')) {
-    return `I'm ${persona?.name || 'StaticRebel'}, an AI assistant powered by local Ollama models. I can help with coding, analysis, scheduling, memory management, and general tasks.`;
+    return `I'm ${personaName}, an AI assistant powered by local Ollama models. I can help with coding, analysis, scheduling, memory management, and general tasks.`;
   }
 
+  // Status check
   if (lowerMessage.includes('status') || lowerMessage.includes('how are you')) {
     return `I'm running smoothly! Here's a quick status:
-- Active Persona: ${persona?.name || 'Default'}
+- Active Persona: ${personaName}
 - System: Online
 - Ready to assist you with any task.`;
   }
 
+  // Default response
   return `I received your message: "${message.slice(0, 100)}${message.length > 100 ? '...' : ''}"
 
-${persona?.role ? `As ${persona.name} (${persona.role}), I'm here to help.` : "I'm here to help."}
+As ${personaName}, I'm here to help.
 
-Note: For full AI responses, make sure Ollama is running with llama3.2 loaded.`;
+Note: For full AI responses with advanced reasoning, make sure Ollama is running with a model loaded.`;
 }

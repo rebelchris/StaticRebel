@@ -1,14 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
-
-async function loadModule(moduleName: string) {
-  try {
-    const modulePath = path.join(process.cwd(), '..', 'lib', `${moduleName}.js`);
-    return await import(modulePath);
-  } catch (error) {
-    return null;
-  }
-}
+import { searchMemories } from '@/lib/vectorMemory.js';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,10 +10,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Search query required' }, { status: 400 });
     }
 
-    const vectorMemory = await loadModule('vectorMemory');
-
-    if (vectorMemory?.searchMemories) {
-      const results = await vectorMemory.searchMemories(query, {
+    try {
+      const results = await searchMemories(query, {
         limit: 20,
         minScore: 0.1,
       });
@@ -36,9 +25,9 @@ export async function GET(request: NextRequest) {
       }));
 
       return NextResponse.json(normalizedResults);
+    } catch (e) {
+      return NextResponse.json([]);
     }
-
-    return NextResponse.json([]);
   } catch (error) {
     console.error('Memory search error:', error);
     return NextResponse.json([]);

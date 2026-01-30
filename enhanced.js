@@ -78,13 +78,9 @@ import {
 
 // Level 2 AI Assistant - New Imports
 import {
-  initPersonaSystem,
-  getSystemPrompt,
-  modifyPersonaFeedback,
+  initPersonaManager as initPersonaSystem,
+  buildSystemPrompt as getSystemPrompt,
   getAvailablePersonas,
-  setActivePersona,
-  createPersona,
-  analyzeForImprovements,
 } from './lib/personaManager.js';
 import {
   initVectorMemory,
@@ -112,7 +108,7 @@ import {
   routeTask,
   orchestrate,
   streamOllama,
-  runClaudeCode,
+  spawnClaudeCode as runClaudeCode,
 } from './orchestrator.js';
 import { research, webResearch, streamResearch } from './lib/webOracle.js';
 import { classifyIntent } from './lib/intentClassifier.js';
@@ -1445,6 +1441,75 @@ function showBanner() {
 }
 
 // ============================================================================
+// Colors & Styling
+// ============================================================================
+
+const colors = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  italic: '\x1b[3m',
+  underline: '\x1b[4m',
+
+  // Foreground colors
+  black: '\x1b[30m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+
+  // Bright colors
+  brightBlack: '\x1b[90m',
+  brightRed: '\x1b[91m',
+  brightGreen: '\x1b[92m',
+  brightYellow: '\x1b[93m',
+  brightBlue: '\x1b[94m',
+  brightMagenta: '\x1b[95m',
+  brightCyan: '\x1b[96m',
+  brightWhite: '\x1b[97m',
+
+  // Background colors
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
+  bgYellow: '\x1b[43m',
+  bgBlue: '\x1b[44m',
+  bgMagenta: '\x1b[45m',
+  bgCyan: '\x1b[46m',
+};
+
+function colorize(text, color) {
+  return color ? `${color}${text}${colors.reset}` : text;
+}
+
+// Styled output functions
+const styles = {
+  user: (text) => colorize(text, colors.brightCyan),
+  assistant: (text) => colorize(text, colors.brightGreen),
+  error: (text) => colorize(text, colors.brightRed),
+  warning: (text) => colorize(text, colors.brightYellow),
+  info: (text) => colorize(text, colors.brightBlue),
+  dim: (text) => colorize(text, colors.dim),
+  heading: (text) => colorize(colorize(text, colors.bold), colors.brightWhite),
+  command: (text) => colorize(text, colors.brightMagenta),
+  success: (text) => colorize(text, colors.brightGreen),
+};
+
+function timestamp() {
+  const now = new Date();
+  return colorize(
+    now.toLocaleTimeString('en-US', { hour12: false }),
+    colors.dim
+  );
+}
+
+function promptSymbol() {
+  return colorize('>', colors.brightYellow);
+}
+
+// ============================================================================
 // Web Search Tool - LLM-aware intelligent search
 // ============================================================================
 
@@ -1638,59 +1703,303 @@ async function runShellCommand(cmd, confirm = true) {
 // Import unified chat handler
 import { handleChat, initChatHandler } from './lib/chatHandler.js';
 
+// Session state
+let messageCount = 0;
+const sessionStart = new Date();
+
+// Command handlers
+const CLI_COMMANDS = {
+  '/help': {
+    description: 'Show available commands',
+    execute: async () => {
+      return (
+        `${styles.heading('╔═══ Available Commands ═══╗')}\n` +
+        `${styles.command('/help')}     ${styles.dim('Show this help message')}\n` +
+        `${styles.command('/clear')}    ${styles.dim('Clear the screen')}\n` +
+        `${styles.command('/history')}  ${styles.dim('Show conversation stats')}\n` +
+        `${styles.command('/models')}   ${styles.dim('List available models')}\n` +
+        `${styles.command('/status')}   ${styles.dim('Show system status')}\n` +
+        `${styles.command('/tasks')}    ${styles.dim('Show scheduled tasks')}\n` +
+        `${styles.command('/skills')}   ${styles.dim('List available skills')}\n` +
+        `${styles.command('/mem')}      ${styles.dim('Show memory stats')}\n` +
+        `${styles.command('/quit')}     ${styles.dim('Exit the assistant')}\n` +
+        `${styles.dim('─'.repeat(32))}\n` +
+        `${styles.dim('Tip: Multi-line input:')}\n` +
+        `${styles.dim('  Type your message and press ')}${styles.command('Enter')}\n` +
+        `${styles.dim('  for a new line. Send with an ')}${styles.command('empty line')}${styles.dim('.')}`
+      );
+    },
+  },
+
+  '/clear': {
+    description: 'Clear the screen',
+    execute: async () => {
+      clearScreen();
+      showBanner();
+      return styles.info('Screen cleared. Ready for new conversation!');
+    },
+  },
+
+  '/history': {
+    description: 'Show conversation statistics',
+    execute: async () => {
+      const duration = Math.floor((new Date() - sessionStart) / 1000);
+      const mins = Math.floor(duration / 60);
+      const secs = duration % 60;
+      return (
+        `${styles.heading('╔═══ Session Statistics ═══╗')}\n` +
+        `${styles.info('Messages:')} ${messageCount}\n` +
+        `${styles.info('Session time:')} ${mins}m ${secs}s\n` +
+        `${styles.info('Started:')} ${sessionStart.toLocaleString()}`
+      );
+    },
+  },
+
+  '/models': {
+    description: 'List available Ollama models',
+    execute: async () => {
+      const { listAvailableModels, getDefaultModel } = await import(
+        './lib/modelRegistry.js'
+      );
+      const models = await listAvailableModels();
+      const defaultModel = getDefaultModel();
+      if (models.length === 0) {
+        return styles.warning('No models available. Make sure Ollama is running.');
+      }
+      return (
+        `${styles.heading('╔═══ Available Models ═══╗')}\n` +
+        models
+          .map((m) => {
+            const isDefault = m.name === defaultModel ? ` ${styles.success('[default]')}` : '';
+            return `${styles.command('•')} ${m.name}${isDefault}`;
+          })
+          .join('\n')
+      );
+    },
+  },
+
+  '/status': {
+    description: 'Show system status',
+    execute: async () => {
+      const { getMemoryStats } = await import('./lib/memoryManager.js');
+      const { getSchedulerStatus } = await import('./lib/cronScheduler.js');
+      const { getHeartbeatStatus } = await import('./lib/heartbeatManager.js');
+      const { getSubagentStats } = await import('./lib/subagentManager.js');
+      const { getDefaultModel } = await import('./lib/modelRegistry.js');
+
+      const memStats = getMemoryStats();
+      const schedulerStatus = getSchedulerStatus();
+      const heartbeatStatus = getHeartbeatStatus();
+      const subagentStats = getSubagentStats();
+      const model = getDefaultModel();
+
+      return (
+        `${styles.heading('╔═══ System Status ═══╗')}\n` +
+        `${styles.info('Model:')} ${model}\n` +
+        `${styles.info('Heartbeat:')} ${heartbeatStatus.running ? styles.success('Running') : styles.dim('Stopped')}\n` +
+        `${styles.info('Scheduler:')} ${schedulerStatus.enabledCount} active tasks\n` +
+        `${styles.info('Subagents:')} ${subagentStats.active} active\n` +
+        `${styles.info('Memory files:')} ${memStats.dailyFiles}`
+      );
+    },
+  },
+
+  '/tasks': {
+    description: 'Show scheduled tasks',
+    execute: async () => {
+      const { listCronJobs, describeCron, getNextRunTime } = await import(
+        './lib/cronScheduler.js'
+      );
+      const jobs = listCronJobs();
+      const enabled = jobs.filter((j) => j.enabled);
+
+      if (enabled.length === 0) {
+        return styles.dim('No scheduled tasks.');
+      }
+
+      return (
+        `${styles.heading('╔═══ Scheduled Tasks ═══╗')}\n` +
+        enabled
+          .map((job) => {
+            const next = getNextRunTime(job);
+            return `${styles.command('•')} ${job.name}\n  ${styles.dim(describeCron(job.schedule.expr))} ${next ? `@ ${next.toLocaleTimeString()}` : ''}`;
+          })
+          .join('\n')
+      );
+    },
+  },
+
+  '/skills': {
+    description: 'List available skills',
+    execute: async () => {
+      const { listSkills } = await import('./lib/skillsManager.js');
+      const skills = listSkills();
+
+      if (skills.length === 0) {
+        return styles.dim('No skills configured.');
+      }
+
+      return (
+        `${styles.heading('╔═══ Available Skills ═══╗')}\n` +
+        skills
+          .map((s) => `${styles.command('•')} ${s.name}: ${s.description || 'No description'}`)
+          .join('\n')
+      );
+    },
+  },
+
+  '/mem': {
+    description: 'Show memory statistics',
+    execute: async () => {
+      const { getMemoryStats } = await import('./lib/memoryManager.js');
+      const { getMemoryStats: getVectorStats } = await import('./lib/vectorMemory.js');
+      const memStats = getMemoryStats();
+      const vectorStats = getVectorStats();
+
+      return (
+        `${styles.heading('╔═══ Memory Statistics ═══╗')}\n` +
+        `${styles.info('Daily files:')} ${memStats.dailyFiles}\n` +
+        `${styles.info('Oldest memory:')} ${memStats.oldestMemory || 'None'}\n` +
+        `${styles.info('Vector memories:')} ${vectorStats.totalMemories}\n` +
+        `${styles.info('Storage used:')} ${((memStats.dailySize + memStats.longTermSize) / 1024).toFixed(1)} KB`
+      );
+    },
+  },
+};
+
 async function chatLoop() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
+    terminal: true,
+    prompt: '',
   });
 
   await loadPersona();
   await initChatHandler();
   writeDailyMemory('[SESSION START]');
 
+  console.log(`\n${styles.success('Charlize')} ${styles.dim('is ready!')}\n`);
+
+  // Show help on start
+  console.log(`${styles.heading('Quick Commands:')}`);
+  console.log(`  ${styles.command('/help')}     ${styles.dim('Show all commands')}`);
+  console.log(`  ${styles.command('/status')}   ${styles.dim('System status')}`);
+  console.log(`  ${styles.command('/models')}   ${styles.dim('List models')}`);
+  console.log(`  ${styles.command('/history')} ${styles.dim('Session stats')}`);
+  console.log(`  ${styles.command('/quit')}     ${styles.dim('Exit')}`);
+  console.log(`  ${styles.dim('─'.repeat(40))}\n`);
+
+  let inputBuffer = [];
+  let isMultiLine = false;
+
   const askQuestion = () => {
-    rl.question('\n> ', async (q) => {
-      if (!q.trim()) {
+    const promptText = isMultiLine
+      ? `${styles.dim('...')} `
+      : `${timestamp()} ${promptSymbol()} `;
+
+    rl.setPrompt(promptText);
+    rl.prompt(true);
+  };
+
+  rl.on('line', async (input) => {
+    const trimmed = input.trim();
+
+    // Empty line ends multi-line input
+    if (isMultiLine && trimmed === '') {
+      const message = inputBuffer.join('\n').trim();
+      inputBuffer = [];
+      isMultiLine = false;
+
+      if (!message) {
         askQuestion();
         return;
       }
 
-      // Exit commands
-      if (
-        ['/quit', '/exit', '/q', 'bye', 'goodbye'].includes(q.toLowerCase())
-      ) {
-        writeDailyMemory('[SESSION END]');
-        console.log('\nGoodbye! Talk soon!\n');
-        rl.close();
-        return;
-      }
+      messageCount++;
+      console.log('');
 
-      // Use unified chat handler
-      const result = await handleChat(q, { source: 'enhanced-cli' });
+      const startTime = Date.now();
+      const result = await handleChat(message, { source: 'enhanced-cli' });
+      const duration = Date.now() - startTime;
 
       if (result.content) {
-        console.log(`\n${result.content}\n`);
+        console.log(`\n${styles.assistant(result.content)}\n`);
+        console.log(
+          styles.dim(`  [${result.type} · ${duration}ms${result.confidence ? ` · ${(result.confidence * 100).toFixed(0)}%` : ''}]`)
+        );
       } else {
-        console.log(`\nI didn't understand that. Could you rephrase?\n`);
+        console.log(`\n${styles.dim("I didn't understand that.")}\n`);
       }
 
       askQuestion();
-    });
-  };
+      return;
+    }
 
-  console.log('\nJust talk to me! Try things like:\n');
-  console.log('  "Remind me to stretch every hour"');
-  console.log('  "I had a cappuccino, log calories"');
-  console.log('  "How many calories today?"');
-  console.log('  "Write a function to calculate fibonacci"');
-  console.log('  "What did we talk about yesterday?"');
-  console.log('  "Search for latest AI news"');
-  console.log('  -- Level 2 Features --');
-  console.log('  "Be more concise" (adjust persona)');
-  console.log('  "Remember this important info" (vector memory)');
-  console.log('  "Create a project" (background workers + TODO.md)');
-  console.log('  "Connect to API" (dynamic API connectors)\n');
-  console.log("Type /quit when you're done.\n");
+    // Check for commands
+    if (!isMultiLine && trimmed.startsWith('/')) {
+      const [cmd] = trimmed.split(' ');
+      const command = CLI_COMMANDS[cmd];
+
+      if (command) {
+        messageCount++;
+        console.log('');
+        const response = await command.execute();
+        console.log(`\n${response}\n`);
+      } else if (['/quit', '/exit', '/q', 'bye', 'goodbye'].includes(cmd.toLowerCase())) {
+        writeDailyMemory('[SESSION END]');
+        console.log(`\n${styles.success('Goodbye! Talk soon!')}\n`);
+        rl.close();
+        return;
+      } else {
+        console.log(`\n${styles.error(`Unknown command: ${cmd}`)}`);
+        console.log(`${styles.dim("Type ")}${styles.command('/help')}${styles.dim(" for available commands.")}\n`);
+      }
+
+      askQuestion();
+      return;
+    }
+
+    // Multi-line mode trigger: ends with \ or \
+    if (!isMultiLine && (trimmed.endsWith('\\') || trimmed.endsWith('\\'))) {
+      inputBuffer.push(trimmed.slice(0, -1));
+      isMultiLine = true;
+      askQuestion();
+      return;
+    }
+
+    // Single line mode
+    if (!isMultiLine) {
+      if (!trimmed) {
+        askQuestion();
+        return;
+      }
+
+      messageCount++;
+      console.log('');
+
+      const startTime = Date.now();
+      const result = await handleChat(trimmed, { source: 'enhanced-cli' });
+      const duration = Date.now() - startTime;
+
+      if (result.content) {
+        console.log(`\n${styles.assistant(result.content)}\n`);
+        console.log(
+          styles.dim(`  [${result.type} · ${duration}ms${result.confidence ? ` · ${(result.confidence * 100).toFixed(0)}%` : ''}]`)
+        );
+      } else {
+        console.log(`\n${styles.dim("I didn't understand that.")}\n`);
+      }
+    } else {
+      inputBuffer.push(input);
+    }
+
+    askQuestion();
+  });
+
+  rl.on('close', () => {
+    process.exit(0);
+  });
 
   askQuestion();
 }

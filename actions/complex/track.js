@@ -130,8 +130,8 @@ export default {
       }
 
       const createResult = store.createTracker(trackerConfig);
-      if (!createResult.success) {
-        return `Failed to create tracker: ${createResult.error}`;
+      if (!createResult) {
+        return `Failed to create tracker`;
       }
 
       return `Created new tracker **@${trackerConfig.name}** (${trackerConfig.displayName})\n\nType: ${trackerConfig.type}\nMetrics: ${trackerConfig.config?.metrics?.join(', ') || 'custom'}\n\nLog entries with: "@${trackerConfig.name} [your entry]"`;
@@ -202,6 +202,36 @@ export default {
   createdAt: '2026-01-29',
 };
 
+// Query patterns - must check these first
+const QUERY_PATTERNS = [
+  /^how many/i,
+  /^how much/i,
+  /^what did i eat/i,
+  /^what have i eaten/i,
+  /^what've i eaten/i,
+  /^what did i log/i,
+  /^what have i logged/i,
+  /^what've i logged/i,
+  /^show me/i,
+  /^display/i,
+  /^tell me/i,
+  /^(what's|whats) my/i,
+  /total/i,
+];
+
+// Create patterns
+const CREATE_PATTERNS = [
+  /create (a |an )?tracker/i,
+  /add (a |an )?tracker/i,
+  /new tracker/i,
+  /make (a |an )?tracker/i,
+  /set up (a |an )?tracker/i,
+  /i want to track/i,
+  /start tracking/i,
+  /can you track/i,
+  /set up tracking/i,
+];
+
 // LLM-based intent analyzer for tracking requests
 async function analyzeTrackingIntent(
   input,
@@ -209,6 +239,32 @@ async function analyzeTrackingIntent(
   getDefaultModel,
   chatCompletion,
 ) {
+  const lower = input.toLowerCase().trim();
+
+  // Step 1: Quick pattern matching for clear intents
+  if (CREATE_PATTERNS.some(p => p.test(lower))) {
+    return { intentType: 'create', trackerType: 'custom', confidence: 0.9 };
+  }
+
+  if (QUERY_PATTERNS.some(p => p.test(lower))) {
+    return { intentType: 'query', trackerType: 'custom', confidence: 0.9 };
+  }
+
+  // Step 2: Check for logging patterns (must come after query check)
+  const logPatterns = [
+    /i (just )?(had|ate|drank|consumed|eaten)/i,
+    /i did (a |an )?/i,
+    /log (my |a )?/i,
+    /record (my |a )?/i,
+    /add (a |my )?/i,
+    /note (this|that)/i,
+    /just logged/i,
+    /tracking/i,
+  ];
+
+  const isLikelyLog = logPatterns.some(p => p.test(lower));
+
+  // Step 3: Use LLM for ambiguous cases or tracker type detection
   try {
     const trackersList =
       existingTrackers.length > 0
@@ -220,7 +276,7 @@ async function analyzeTrackingIntent(
     const intentPrompt = `Analyze this user input and determine the tracking intent:
 
 User input: "${input}"
-
+Is this likely a log/statement? ${isLikelyLog}
 Existing trackers:
 ${trackersList}
 
@@ -229,17 +285,13 @@ Respond with ONLY valid JSON:
   "intentType": "create|log|query|none",
   "trackerType": "nutrition|workout|sleep|habit|mood|hydration|medication|custom|unknown",
   "trackerNeeded": "existing_tracker_name or null if needs new tracker",
-  "description": "brief description of what to track (for new trackers)",
+  "description": "brief description",
   "confidence": 0.0-1.0
 }
 
-Intent types:
-- "create": User explicitly wants to CREATE/ADD/MAKE a new tracker (e.g., "create a tracker for pushups", "add a custom tracker for...", "make a new tracker", "set up tracking for...", "I want to track X" where X is a new category not in existing trackers)
-- "log": User wants to record/log actual data to an existing tracker (e.g., "I had coffee", "did a 5k run", "log 50 pushups", "I ate pizza")
-- "query": User wants to retrieve/view data (e.g., "what did I eat", "how many calories", "show my workouts")
-- "none": Not tracking-related
-
-IMPORTANT: If the user says "add a tracker", "create a tracker", "new tracker", "set up tracking for", or similar phrases about MAKING a tracker, that is "create" intent, NOT "log" intent.`;
+If it's a statement about something they did (e.g., "I ate lunch", "I had coffee"), it's LOG intent.
+If it's a question asking for information (e.g., "how many calories", "what did I eat"), it's QUERY intent.
+If it mentions creating a new tracker, it's CREATE intent.`;
 
     const model = getDefaultModel();
     const response = await chatCompletion(model, [
@@ -270,52 +322,97 @@ async function findOrCreateTracker(
 ) {
   try {
     const trackers = store.listTrackers();
+    const inputLower = description.toLowerCase();
 
-    // For non-custom trackers, match by type
+    // Strategy 1: Check if input explicitly mentions an existing tracker name
+    // e.g., "@pushups add 50" or "log to pushups tracker"
+    for (const t of trackers) {
+      const trackerNameLower = t.name.toLowerCase();
+      const displayNameLower = t.displayName.toLowerCase();
+      // Check if tracker name/displayName appears in the input
+      if (inputLower.includes(trackerNameLower) ||
+          inputLower.includes(displayNameLower.replace(' tracker', ''))) {
+        console.log(`  \x1b[36m[Matched tracker by name: @${t.name}]\x1b[0m`);
+        return t;
+      }
+    }
+
+    // Strategy 2: Match by type - prefer trackers with the same type
     if (trackerType !== 'custom' && trackerType !== 'unknown') {
-      const existingTracker = trackers.find(
+      const typeMatch = trackers.find(
         (t) =>
           t.type === trackerType ||
           (trackerType === 'nutrition' &&
             (t.type === 'food' || t.type === 'nutrition')),
       );
 
-      if (existingTracker) {
-        return existingTracker;
+      if (typeMatch) {
+        console.log(`  \x1b[36m[Matched tracker by type: @${typeMatch.name}]\x1b[0m`);
+        return typeMatch;
       }
     }
 
-    // For custom trackers, try to match by name/description similarity
-    if (trackerType === 'custom' && description) {
-      const descLower = description.toLowerCase();
-      const keywords = descLower.split(/\s+/).filter((w) => w.length > 2);
+    // Strategy 3: For specific workout types, try to find related trackers
+    // e.g., "pushups" should match "Pushup Tracker", "run" should match "Running Tracker"
+    const workoutKeywords = {
+      'pushup': ['pushup', 'push-up', 'push ups', 'pushup'],
+      'run': ['run', 'running', 'jog', 'jogging'],
+      'walk': ['walk', 'walking'],
+      'bike': ['bike', 'biking', 'cycling', 'cycle'],
+      'swim': ['swim', 'swimming'],
+      'squat': ['squat', 'squats'],
+      'lift': ['lift', 'lifting', 'weights', 'weight'],
+    };
 
-      // Look for a tracker whose name or displayName contains relevant keywords
-      const matchingTracker = trackers.find((t) => {
-        const trackerName = (t.name + ' ' + t.displayName).toLowerCase();
-        return keywords.some(
-          (kw) => trackerName.includes(kw) || descLower.includes(t.name),
+    for (const [keyword, variants] of Object.entries(workoutKeywords)) {
+      if (variants.some(v => inputLower.includes(v))) {
+        const keywordMatch = trackers.find(t =>
+          t.name.toLowerCase().includes(keyword) ||
+          t.displayName.toLowerCase().includes(keyword)
         );
+        if (keywordMatch) {
+          console.log(`  \x1b[36m[Matched tracker by keyword: @${keywordMatch.name}]\x1b[0m`);
+          return keywordMatch;
+        }
+      }
+    }
+
+    // Strategy 4: For custom trackers, try to match by description keywords
+    if (trackerType === 'custom' && description) {
+      const keywords = description.toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2)
+        .filter(w => !['tracker', 'create', 'add', 'new', 'log'].includes(w));
+
+      const keywordMatch = trackers.find((t) => {
+        const trackerText = (t.name + ' ' + t.displayName + ' ' + (t.description || '')).toLowerCase();
+        return keywords.some(kw => trackerText.includes(kw));
       });
 
-      if (matchingTracker) {
-        console.log(
-          `  \x1b[36m[Matched existing tracker: @${matchingTracker.name}]\x1b[0m`,
-        );
-        return matchingTracker;
+      if (keywordMatch) {
+        console.log(`  \x1b[36m[Matched tracker by description: @${keywordMatch.name}]\x1b[0m`);
+        return keywordMatch;
       }
     }
 
-    // Auto-create the tracker if no match found
-    console.log(`  \x1b[36m[Auto-creating ${trackerType} tracker...]\x1b[0m`);
+    // Strategy 5: If there's only one tracker, use it
+    if (trackers.length === 1) {
+      console.log(`  \x1b[36m[Using only available tracker: @${trackers[0].name}]\x1b[0m`);
+      return trackers[0];
+    }
+
+    // Strategy 6: Last resort - create a new tracker only if no match found
+    console.log(`  \x1b[36m[No matching tracker found, creating new one...]\x1b[0m`);
 
     const trackerConfig = await parseTrackerFromNaturalLanguage(description);
     if (!trackerConfig) {
       return null;
     }
 
-    // Check if name already exists
-    const nameExists = trackers.find((t) => t.name === trackerConfig.name);
+    // Check if a tracker with similar name already exists
+    const nameExists = trackers.find(
+      (t) => t.name.toLowerCase() === trackerConfig.name.toLowerCase()
+    );
     if (nameExists) {
       console.log(
         `  \x1b[33m[Tracker @${trackerConfig.name} already exists, using it]\x1b[0m`,
@@ -434,12 +531,44 @@ function parseWorkoutHeuristic(text) {
   const lower = text.toLowerCase();
   const data = {};
 
+  // Handle "50 pushups" style inputs
+  const pushupMatch = lower.match(/(\d+)\s*(pushups|push-ups|push ups)/i);
+  if (pushupMatch) {
+    data.exercise = 'pushups';
+    data.count = parseInt(pushupMatch[1]);
+    return data;
+  }
+
+  // Handle "X reps" style inputs
+  const repsMatch = lower.match(/(\d+)\s*(reps|repetitions)/i);
+  if (repsMatch) {
+    data.exercise = 'reps';
+    data.count = parseInt(repsMatch[1]);
+    return data;
+  }
+
+  // Handle "X km run" style inputs
+  const runMatch = lower.match(/(\d+(?:\.\d+)?)\s*(km|miles?|meters?)\s*(run|running|jog)/i);
+  if (runMatch) {
+    data.exercise = 'running';
+    data.distance = `${runMatch[1]} ${runMatch[2]}`;
+    return data;
+  }
+
+  // Handle "I did X pushups" pattern
+  const didPushupsMatch = lower.match(/i\s+(?:did|did\s+a|completed)\s+(\d+)\s*(pushups|push-ups|push ups)/i);
+  if (didPushupsMatch) {
+    data.exercise = 'pushups';
+    data.count = parseInt(didPushupsMatch[1]);
+    return data;
+  }
+
   const exerciseMatch = lower.match(
     /(?:did|completed|finished|started)\s+(?:a\s+)?(?:workout of\s+)?(.+)/,
   );
   if (exerciseMatch) {
     data.exercise = exerciseMatch[1].trim();
-  } else {
+  } else if (!data.count) {
     data.exercise = 'Workout';
   }
 
@@ -461,7 +590,8 @@ async function logToTracker(
   chatCompletion,
 ) {
   try {
-    let parsed = await parseRecordFromText(tracker.name, input, tracker.type);
+    // Parse the user's input - pass input text and tracker type correctly
+    let parsed = await parseRecordFromText(input, tracker.type);
 
     // Fallback to heuristic parsing if LLM parsing fails
     if (!parsed.success || Object.keys(parsed.data || {}).length === 0) {
@@ -499,12 +629,12 @@ async function logToTracker(
       JSON.stringify(parsed.data),
     );
 
-    const result = store.addRecord(tracker.name, {
+    const result = store.addRecord(tracker.id, {
       data: parsed.data,
       source: 'natural-language',
     });
 
-    if (result.success) {
+    if (result) {
       const dataEntries = Object.entries(parsed.data)
         .filter(([k, v]) => v !== null && v !== undefined && v !== '')
         .map(([k, v]) => `${k}: ${v}`)
@@ -516,7 +646,7 @@ async function logToTracker(
       };
     }
 
-    console.error(`[Tracker] Failed to add record:`, result.error);
+    console.error(`[Tracker] Failed to add record`);
     return { success: false, message: null };
   } catch (e) {
     console.error(`[Tracker] Error logging to ${tracker.name}:`, e.message);
@@ -525,19 +655,28 @@ async function logToTracker(
 }
 
 async function handleTrackQuery(input, tracker, store) {
-  const query = new QueryEngine();
-  const stats = query.getStats(tracker.name, 'today');
+  const query = new QueryEngine(store);
+  const stats = query.getStats(tracker.id);
 
-  if (stats.totalEntries === 0) {
+  if (stats.count === 0) {
+    return `No entries logged yet for ${tracker.displayName}.`;
+  }
+
+  // Get today's records
+  const data = store.getRecordsByDateRange(tracker.id, null, null);
+  const today = new Date().toISOString().split('T')[0];
+  const todayRecords = data.records.filter((r) => r.timestamp?.startsWith(today));
+
+  if (todayRecords.length === 0) {
     return `No entries logged today for ${tracker.displayName}.`;
   }
 
-  const totalCals = stats.records.reduce(
+  const totalCals = todayRecords.reduce(
     (sum, r) => sum + (r.data?.calories || 0),
     0,
   );
 
-  const validRecords = stats.records.filter((r) => {
+  const validRecords = todayRecords.filter((r) => {
     const meal = r.data?.name || r.data?.meal || r.data?.exercise || '';
     return meal && meal.toLowerCase() !== 'no meal mentioned';
   });

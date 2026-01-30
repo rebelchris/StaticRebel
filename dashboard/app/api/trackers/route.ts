@@ -1,39 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
-
-async function loadTrackerModule() {
-  try {
-    const trackerPath = path.join(process.cwd(), '..', 'tracker.js');
-    return await import(trackerPath);
-  } catch (error) {
-    console.error('Failed to load tracker module:', error);
-    return null;
-  }
-}
+import { TrackerStore } from '@/tracker.js';
 
 export async function GET() {
   try {
-    const trackerModule = await loadTrackerModule();
+    const store = new TrackerStore();
+    const trackers = store.listTrackers();
 
-    if (trackerModule?.TrackerStore) {
-      const store = new trackerModule.TrackerStore();
-      const trackers = store.listTrackers();
+    // Add id field for consistency
+    const enrichedTrackers = trackers.map((tracker: any) => ({
+      ...tracker,
+      id: tracker.name || tracker.id,
+    }));
 
-      // Enrich with entry counts
-      const enrichedTrackers = trackers.map((tracker: any) => {
-        const entries = store.getEntries(tracker.name);
-        return {
-          ...tracker,
-          id: tracker.name,
-          count: entries?.length || 0,
-          lastEntry: entries?.length > 0 ? entries[entries.length - 1]?.timestamp : null,
-        };
-      });
-
-      return NextResponse.json(enrichedTrackers);
-    }
-
-    return NextResponse.json([]);
+    return NextResponse.json(enrichedTrackers);
   } catch (error) {
     console.error('Trackers fetch error:', error);
     return NextResponse.json([]);
@@ -48,15 +27,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tracker name is required' }, { status: 400 });
     }
 
-    const trackerModule = await loadTrackerModule();
-
-    if (trackerModule?.TrackerStore) {
-      const store = new trackerModule.TrackerStore();
-      store.createTracker(name, { type, displayName });
+    try {
+      const store = new TrackerStore();
+      store.createTracker({ name, type, displayName } as any);
       return NextResponse.json({ success: true, message: 'Tracker created' });
+    } catch (e) {
+      return NextResponse.json({ error: 'Tracker system not available' }, { status: 503 });
     }
-
-    return NextResponse.json({ error: 'Tracker system not available' }, { status: 503 });
   } catch (error) {
     console.error('Tracker create error:', error);
     return NextResponse.json({ error: 'Failed to create tracker' }, { status: 500 });
