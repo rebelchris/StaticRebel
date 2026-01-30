@@ -77,10 +77,13 @@ const phases = [
 
 ```javascript
 // New file: lib/cacheManager.js
+import LRUCache from 'lru-cache';
+import { SemanticCache } from './semanticCache.js';
+
 class CacheManager {
   constructor() {
     this.l1Cache = new LRUCache({ max: 100, ttl: 5 * 60 * 1000 });
-    this.semanticCache = new SemanticCache(threshold: 0.92);
+    this.semanticCache = new SemanticCache({ threshold: 0.92 });
   }
 
   async get(query, embeddings) {
@@ -156,10 +159,12 @@ const predictions = {
 ### 4.3 Conversational Memory Triggers
 
 ```javascript
-// Automatic memory surfacing
-"I notice you asked about this 3 days ago - would you like me to continue from there?"
-"You typically run tests after modifying this file - should I do that?"
-"Based on your preferences, I'll use TypeScript for this - say 'use JS' if you prefer"
+// Automatic memory surfacing triggers
+const memoryTriggers = [
+  "I notice you asked about this 3 days ago - would you like me to continue from there?",
+  "You typically run tests after modifying this file - should I do that?",
+  "Based on your preferences, I'll use TypeScript for this - say 'use JS' if you prefer"
+];
 ```
 
 ---
@@ -233,11 +238,10 @@ Using Framer Motion (already installed):
 ### 7.1 "Did You Know?" Moments
 
 Occasionally surface helpful tips:
-```
-"Tip: You can say 'remember this' to save important context for later"
-"Tip: I can watch files for changes - try 'watch src/'"
-"Tip: Say 'be concise' to get shorter responses"
-```
+
+- "Tip: You can say 'remember this' to save important context for later"
+- "Tip: I can watch files for changes - try 'watch src/'"
+- "Tip: Say 'be concise' to get shorter responses"
 
 ### 7.2 Anticipatory Actions
 
