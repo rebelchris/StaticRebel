@@ -1,0 +1,186 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+interface Persona {
+  id: string;
+  name: string;
+  role?: string;
+  systemPrompt?: string;
+  traits?: string[];
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// In-memory storage for personas (in production, this would be a database)
+let personas: Persona[] = [
+  {
+    id: 'default',
+    name: 'Default Assistant',
+    role: 'General Purpose Assistant',
+    systemPrompt: 'You are a helpful AI assistant.',
+    traits: ['helpful', 'friendly', 'knowledgeable'],
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+// GET /api/personas - Get all personas
+export async function GET() {
+  try {
+    return NextResponse.json({ personas, total: personas.length });
+  } catch (error) {
+    console.error('Failed to fetch personas:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch personas' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/personas - Create new persona
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { name, role, systemPrompt, traits } = body;
+
+    if (!name) {
+      return NextResponse.json(
+        { error: 'Name is required' },
+        { status: 400 }
+      );
+    }
+
+    const newPersona: Persona = {
+      id: `persona_${Date.now()}`,
+      name,
+      role: role || '',
+      systemPrompt: systemPrompt || '',
+      traits: traits || [],
+      isActive: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    personas.push(newPersona);
+
+    return NextResponse.json({ persona: newPersona, success: true });
+  } catch (error) {
+    console.error('Failed to create persona:', error);
+    return NextResponse.json(
+      { error: 'Failed to create persona' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/personas - Update persona or activate
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, updates, action } = body;
+
+    if (action === 'activate' && id) {
+      // Deactivate all personas first
+      personas = personas.map((p) => ({ ...p, isActive: false }));
+      
+      // Activate the selected one
+      const personaIndex = personas.findIndex((p) => p.id === id);
+      if (personaIndex === -1) {
+        return NextResponse.json(
+          { error: 'Persona not found' },
+          { status: 404 }
+        );
+      }
+      
+      personas[personaIndex].isActive = true;
+      personas[personaIndex].updatedAt = new Date().toISOString();
+      
+      return NextResponse.json({ 
+        persona: personas[personaIndex], 
+        success: true 
+      });
+    }
+
+    if (!id || !updates) {
+      return NextResponse.json(
+        { error: 'ID and updates are required' },
+        { status: 400 }
+      );
+    }
+
+    const personaIndex = personas.findIndex((p) => p.id === id);
+    if (personaIndex === -1) {
+      return NextResponse.json(
+        { error: 'Persona not found' },
+        { status: 404 }
+      );
+    }
+
+    personas[personaIndex] = {
+      ...personas[personaIndex],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    return NextResponse.json({ 
+      persona: personas[personaIndex], 
+      success: true 
+    });
+  } catch (error) {
+    console.error('Failed to update persona:', error);
+    return NextResponse.json(
+      { error: 'Failed to update persona' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/personas - Delete persona
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'ID is required' },
+        { status: 400 }
+      );
+    }
+
+    if (id === 'default') {
+      return NextResponse.json(
+        { error: 'Cannot delete default persona' },
+        { status: 400 }
+      );
+    }
+
+    const personaIndex = personas.findIndex((p) => p.id === id);
+    if (personaIndex === -1) {
+      return NextResponse.json(
+        { error: 'Persona not found' },
+        { status: 404 }
+      );
+    }
+
+    const wasActive = personas[personaIndex].isActive;
+    personas.splice(personaIndex, 1);
+
+    // If we deleted the active persona, activate default
+    if (wasActive) {
+      const defaultPersona = personas.find((p) => p.id === 'default');
+      if (defaultPersona) {
+        defaultPersona.isActive = true;
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete persona:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete persona' },
+      { status: 500 }
+    );
+  }
+}

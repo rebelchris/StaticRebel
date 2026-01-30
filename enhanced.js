@@ -121,6 +121,10 @@ import {
   executeAction,
   getAllActions,
 } from './lib/actionRegistry.js';
+import {
+  initEvolutionSystem,
+  getEvolutionOrchestrator,
+} from './lib/evolutionOrchestrator.js';
 
 const PROFILE_FILE = path.join(os.homedir(), '.static-rebel-profile.md');
 
@@ -1752,6 +1756,24 @@ async function main() {
     console.log(`\n[Heartbeat Check] ${msg}\n`);
     writeDailyMemory(`[HEARTBEAT] ${msg}`);
   });
+
+  // Initialize Evolution System (Project Prometheus)
+  try {
+    const evolutionOrchestrator = await initEvolutionSystem();
+    // Inject external dependencies
+    evolutionOrchestrator.setDependencies({
+      cronScheduler: { scheduleJob: addCronJob },
+      workerManager: { createTask },
+      vectorMemory: { addMemory, searchMemories },
+      reflectionEngine: null, // Will be set if available
+      feedbackManager: null,  // Will be set if available
+      sessionMemory: null,    // Will be set if available
+    });
+    await evolutionOrchestrator.start();
+    console.log('[Evolution] Self-evolution system activated');
+  } catch (e) {
+    console.warn('[Evolution] Failed to initialize:', e.message);
+  }
 
   // Check Ollama connection early
   const ollamaOk = await checkOllamaAndNotify();
