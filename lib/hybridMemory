@@ -1,0 +1,400 @@
+/**
+ * Hybrid Memory Search
+ * Combines vector embeddings for semantic similarity with keyword matching
+ * 
+ * Best of both worlds:
+ * - Vector embeddings: semantic similarity, concepts, meaning
+ * - Keyword matching: exact term retrieval, precise matches
+ */
+
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+const MEMORY_DIR = path.join(os.homedir(), '.static-rebel', 'memory');
+
+class SimpleVectorStore {
+  constructor() {
+    this.vectors = new Map();
+    this.documents = new Map();
+  }
+
+  add(id, document, vector) {
+    this.vectors.set(id, vector);
+    this.documents.set(id, document);
+  }
+
+  search(queryVector, topK = 5) {
+    const results = [];
+
+    for (const [id, vector] of this.vectors) {
+      const similarity = this.cosineSimilarity(queryVector, vector);
+      results.push({ id, similarity, document: this.documents.get(id) });
+    }
+
+    return results
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, topK);
+  }
+
+  cosineSimilarity(a, b) {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  delete(id) {
+    this.vectors.delete(id);
+    this.documents.delete(id);
+  }
+
+  getAll() {
+    return Array.from(this.documents.entries()).map(([id, document]) => ({
+      id,
+      document,
+    }));
+  }
+}
+
+class SimpleEmbedder {
+  constructor() {
+    this.vocabulary = new Set();
+    this.wordVectors = new Map();
+    this.dimensions = 100;
+  }
+
+  embed(text) {
+    const words = this.tokenize(text);
+    const vector = new Array(this.dimensions).fill(0);
+
+    for (const word of words) {
+      const wordVector = this.getWordVector(word);
+      for (let i = 0; i < this.dimensions; i++) {
+        vector[i] += wordVector[i];
+      }
+    }
+
+    const norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
+    if (norm > 0) {
+      for (let i = 0; i < this.dimensions; i++) {
+        vector[i] /= norm;
+      }
+    }
+
+    return vector;
+  }
+
+  tokenize(text) {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2);
+  }
+
+  getWordVector(word) {
+    if (!this.wordVectors.has(word)) {
+      const vector = this.generateWordVector(word);
+      this.wordVectors.set(word, vector);
+    }
+    return this.wordVectors.get(word);
+  }
+
+  generateWordVector(word) {
+    const vector = [];
+    let seed = this.hashString(word);
+    
+    for (let i = 0; i < this.dimensions; i++) {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      vector.push((seed / 4294967296) * 2 - 1);
+    }
+    
+    return vector;
+  }
+
+  hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash);
+  }
+}
+
+export class HybridMemorySearch {
+  constructor(options = {}) {
+    this.vectorStore = new SimpleVectorStore();
+    this.embedder = new SimpleEmbedder();
+    this.keywordIndex = new Map();
+    this.documents = new Map();
+    this.options = {
+      vectorWeight: options.vectorWeight || 0.6,
+      keywordWeight: options.keywordWeight || 0.4,
+      topK: options.topK || 10,
+      ...options,
+    };
+  }
+
+  async index(id, content, metadata = {}) {
+    const vector = this.embedder.embed(content);
+    
+    const document = {
+      id,
+      content,
+      metadata,
+      indexedAt: Date.now(),
+    };
+    
+    this.documents.set(id, document);
+    this.vectorStore.add(id, document, vector);
+
+    const words = this.embedder.tokenize(content);
+    const uniqueWords = [...new Set(words)];
+    
+    for (const word of uniqueWords) {
+      if (!this.keywordIndex.has(word)) {
+        this.keywordIndex.set(word, new Set());
+      }
+      this.keywordIndex.get(word).add(id);
+    }
+
+    return { id, words: uniqueWords.length };
+  }
+
+  async search(query, options = {}) {
+    const topK = options.topK || this.options.topK;
+    
+    const queryVector = this.embedder.embed(query);
+    const vectorResults = this.vectorStore.search(queryVector, topK * 2);
+
+    const keywordResults = this.keywordSearch(query, topK * 2);
+
+    const combined = this.combineResults(vectorResults, keywordResults, topK);
+
+    return combined.map(result => ({
+      ...result,
+      document: this.documents.get(result.id),
+    }));
+  }
+
+  keywordSearch(query, topK) {
+    const queryWords = this.embedder.tokenize(query);
+    const scores = new Map();
+
+    for (const word of queryWords) {
+      const docIds = this.keywordIndex.get(word);
+      if (docIds) {
+        for (const id of docIds) {
+          scores.set(id, (scores.get(id) || 0) + 1);
+        }
+      }
+    }
+
+    for (const [id, document] of this.documents) {
+      const content = document.content.toLowerCase();
+      const queryLower = query.toLowerCase();
+      
+      if (content.includes(queryLower)) {
+        scores.set(id, (scores.get(id) || 0) + 10);
+      }
+    }
+
+    return Array.from(scores.entries())
+      .map(([id, score]) => ({ id, score }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK);
+  }
+
+  combineResults(vectorResults, keywordResults, topK) {
+    const k = 60;
+    const scores = new Map();
+
+    vectorResults.forEach((result, rank) => {
+      const id = result.id;
+      const rrfScore = 1 / (k + rank + 1);
+      const weightedScore = rrfScore * this.options.vectorWeight;
+      scores.set(id, {
+        id,
+        vectorScore: result.similarity,
+        keywordScore: 0,
+        combinedScore: weightedScore,
+      });
+    });
+
+    keywordResults.forEach((result, rank) => {
+      const id = result.id;
+      const rrfScore = 1 / (k + rank + 1);
+      const weightedScore = rrfScore * this.options.keywordWeight;
+      
+      if (scores.has(id)) {
+        const existing = scores.get(id);
+        existing.keywordScore = result.score;
+        existing.combinedScore += weightedScore;
+      } else {
+        scores.set(id, {
+          id,
+          vectorScore: 0,
+          keywordScore: result.score,
+          combinedScore: weightedScore,
+        });
+      }
+    });
+
+    return Array.from(scores.values())
+      .sort((a, b) => b.combinedScore - a.combinedScore)
+      .slice(0, topK);
+  }
+
+  async searchWithFilters(query, filters = {}, options = {}) {
+    const results = await this.search(query, options);
+    
+    return results.filter(result => {
+      const doc = result.document;
+      
+      if (filters.type && doc.metadata?.type !== filters.type) return false;
+      if (filters.since && doc.indexedAt < new Date(filters.since).getTime()) return false;
+      if (filters.until && doc.indexedAt > new Date(filters.until).getTime()) return false;
+      if (filters.metadata) {
+        for (const [key, value] of Object.entries(filters.metadata)) {
+          if (doc.metadata?.[key] !== value) return false;
+        }
+      }
+      
+      return true;
+    });
+  }
+
+  async delete(id) {
+    const document = this.documents.get(id);
+    if (!document) return false;
+
+    const words = this.embedder.tokenize(document.content);
+    for (const word of words) {
+      const docIds = this.keywordIndex.get(word);
+      if (docIds) {
+        docIds.delete(id);
+        if (docIds.size === 0) {
+          this.keywordIndex.delete(word);
+        }
+      }
+    }
+
+    this.vectorStore.delete(id);
+    this.documents.delete(id);
+    
+    return true;
+  }
+
+  async update(id, content, metadata = {}) {
+    await this.delete(id);
+    return await this.index(id, content, metadata);
+  }
+
+  getAllDocuments() {
+    return Array.from(this.documents.values());
+  }
+
+  getStats() {
+    return {
+      totalDocuments: this.documents.size,
+      uniqueKeywords: this.keywordIndex.size,
+      averageKeywordsPerDoc: this.documents.size > 0 
+        ? Array.from(this.keywordIndex.values()).reduce((sum, set) => sum + set.size, 0) / this.documents.size
+        : 0,
+    };
+  }
+
+  clear() {
+    this.vectorStore = new SimpleVectorStore();
+    this.keywordIndex.clear();
+    this.documents.clear();
+  }
+}
+
+export class MemoryIndexer {
+  constructor() {
+    this.search = new HybridMemorySearch();
+    this.indexedFiles = new Set();
+  }
+
+  async indexAllMemory() {
+    if (!fs.existsSync(MEMORY_DIR)) {
+      return { indexed: 0 };
+    }
+
+    const files = fs.readdirSync(MEMORY_DIR, { recursive: true });
+    let indexed = 0;
+
+    for (const file of files) {
+      const filePath = path.join(MEMORY_DIR, file);
+      
+      if (fs.statSync(filePath).isFile() && file.endsWith('.md')) {
+        if (this.indexedFiles.has(filePath)) continue;
+
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          await this.search.index(`memory:${file}`, content, {
+            type: 'memory',
+            path: filePath,
+            file,
+          });
+          this.indexedFiles.add(filePath);
+          indexed++;
+        } catch (e) {
+          console.error(`Failed to index ${file}:`, e.message);
+        }
+      }
+    }
+
+    return { indexed };
+  }
+
+  async indexFile(filePath) {
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: 'File not found' };
+    }
+
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const id = `file:${filePath}`;
+      await this.search.index(id, content, {
+        type: 'file',
+        path: filePath,
+      });
+      this.indexedFiles.add(filePath);
+      return { success: true, id };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  async search(query, options = {}) {
+    return await this.search.search(query, options);
+  }
+
+  async reindexFile(filePath) {
+    const id = `file:${filePath}`;
+    await this.search.delete(id);
+    return await this.indexFile(filePath);
+  }
+}
+
+export function createHybridSearch(options = {}) {
+  return new HybridMemorySearch(options);
+}
+
+export function createMemoryIndexer() {
+  return new MemoryIndexer();
+}
+
+export default HybridMemorySearch;

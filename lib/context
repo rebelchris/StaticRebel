@@ -1,0 +1,376 @@
+/**
+ * Context Window Guard
+ * Checks if there's enough context space before LLM calls
+ * Compacts sessions by summarizing when near limit
+ * Fails gracefully instead of truncating silently
+ */
+
+import { EventEmitter } from 'events';
+
+/**
+ * Token estimator (approximate)
+ * Roughly 4 characters per token for English text
+ */
+export function estimateTokens(text) {
+  if (typeof text === 'string') {
+    return Math.ceil(text.length / 4);
+  }
+  if (Array.isArray(text)) {
+    return text.reduce((sum, item) => sum + estimateTokens(item), 0);
+  }
+  if (typeof text === 'object') {
+    return estimateTokens(JSON.stringify(text));
+  }
+  return 0;
+}
+
+/**
+ * Context Window Guard
+ * Monitors and manages context window usage
+ */
+export class ContextWindowGuard extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    
+    // Model context limits (in tokens)
+    this.modelLimits = {
+      'gpt-4': 8192,
+      'gpt-4-32k': 32768,
+      'gpt-3.5-turbo': 4096,
+      'claude-3-opus': 200000,
+      'claude-3-sonnet': 200000,
+      'claude-3-haiku': 200000,
+      'ollama-default': 4096,
+      ...options.modelLimits,
+    };
+    
+    // Safety margins
+    this.safetyMargin = options.safetyMargin || 500; // Tokens to reserve
+    this.warningThreshold = options.warningThreshold || 0.8; // 80% usage triggers warning
+    this.criticalThreshold = options.criticalThreshold || 0.95; // 95% triggers compaction
+    
+    this.currentModel = options.model || 'ollama-default';
+    this.sessionHistory = [];
+    this.compactionCount = 0;
+    this.totalTokensSaved = 0;
+  }
+
+  /**
+   * Set current model
+   */
+  setModel(model) {
+    this.currentModel = model;
+    this.emit('model:changed', { model, limit: this.getContextLimit() });
+  }
+
+  /**
+   * Get context limit for current model
+   */
+  getContextLimit() {
+    return this.modelLimits[this.currentModel] || this.modelLimits['ollama-default'];
+  }
+
+  /**
+   * Get available context space
+   */
+  getAvailableSpace() {
+    const limit = this.getContextLimit();
+    const used = this.estimateCurrentUsage();
+    return limit - used - this.safetyMargin;
+  }
+
+  /**
+   * Estimate current token usage
+   */
+  estimateCurrentUsage() {
+    return this.sessionHistory.reduce((sum, entry) => {
+      return sum + estimateTokens(entry.content);
+    }, 0);
+  }
+
+  /**
+   * Check if there's enough space for a request
+   */
+  checkSpace(requestTokens) {
+    const limit = this.getContextLimit();
+    const used = this.estimateCurrentUsage();
+    const available = limit - used - this.safetyMargin;
+    const projectedUsage = used + requestTokens;
+    const usageRatio = projectedUsage / limit;
+    
+    const result = {
+      allowed: true,
+      currentUsage: used,
+      projectedUsage,
+      limit,
+      available,
+      usageRatio,
+      requiresCompaction: false,
+      warning: null,
+    };
+
+    // Check if we exceed critical threshold
+    if (usageRatio > this.criticalThreshold) {
+      result.requiresCompaction = true;
+      result.warning = `Context window nearly full (${(usageRatio * 100).toFixed(1)}%). Compaction required.`;
+    }
+    // Check if we exceed warning threshold
+    else if (usageRatio > this.warningThreshold) {
+      result.warning = `Context window usage high (${(usageRatio * 100).toFixed(1)}%)`;
+    }
+
+    // Check if request fits
+    if (requestTokens > available) {
+      result.allowed = false;
+      result.reason = `Request (${requestTokens} tokens) exceeds available space (${available} tokens)`;
+      
+      // Try to make room through compaction
+      if (this.canCompact()) {
+        result.requiresCompaction = true;
+        result.reason += '. Compaction may help.';
+      }
+    }
+
+    this.emit('space:check', result);
+    return result;
+  }
+
+  /**
+   * Check if compaction is possible
+   */
+  canCompact() {
+    return this.sessionHistory.length > 2;
+  }
+
+  /**
+   * Add entry to session history
+   */
+  addEntry(role, content, metadata = {}) {
+    const entry = {
+      id: `entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      role,
+      content,
+      timestamp: Date.now(),
+      tokens: estimateTokens(content),
+      metadata,
+      compacted: false,
+    };
+
+    // Check space before adding
+    const spaceCheck = this.checkSpace(entry.tokens);
+    
+    if (!spaceCheck.allowed && spaceCheck.requiresCompaction) {
+      // Try to compact first
+      this.compact();
+      
+      // Re-check
+      const recheck = this.checkSpace(entry.tokens);
+      if (!recheck.allowed) {
+        this.emit('entry:rejected', { entry, reason: 'Insufficient space even after compaction' });
+        return { success: false, reason: 'Context window full' };
+      }
+    }
+
+    this.sessionHistory.push(entry);
+    this.emit('entry:added', { entry, usage: this.estimateCurrentUsage() });
+    
+    return { success: true, entry };
+  }
+
+  /**
+   * Compact session history by summarizing old entries
+   */
+  compact() {
+    if (this.sessionHistory.length < 3) {
+      return { compacted: false, reason: 'Not enough entries to compact' };
+    }
+
+    this.emit('compaction:started', { 
+      entriesBefore: this.sessionHistory.length,
+      tokensBefore: this.estimateCurrentUsage(),
+    });
+
+    // Keep first entry (system prompt) and last 2 entries (recent context)
+    const toCompact = this.sessionHistory.slice(1, -2);
+    const toKeep = [this.sessionHistory[0], ...this.sessionHistory.slice(-2)];
+
+    if (toCompact.length === 0) {
+      return { compacted: false, reason: 'No entries to compact' };
+    }
+
+    // Create summary of compacted entries
+    const summary = this.summarizeEntries(toCompact);
+    const summaryTokens = estimateTokens(summary);
+    const savedTokens = toCompact.reduce((sum, e) => sum + e.tokens, 0) - summaryTokens;
+
+    // Create summary entry
+    const summaryEntry = {
+      id: `summary-${Date.now()}`,
+      role: 'system',
+      content: `[Previous conversation summary]:\n${summary}`,
+      timestamp: Date.now(),
+      tokens: summaryTokens,
+      metadata: { 
+        type: 'summary', 
+        compactedEntries: toCompact.length,
+        originalTokens: toCompact.reduce((sum, e) => sum + e.tokens, 0),
+      },
+      compacted: true,
+    };
+
+    // Replace history
+    this.sessionHistory = [toKeep[0], summaryEntry, ...toKeep.slice(1)];
+    this.compactionCount++;
+    this.totalTokensSaved += savedTokens;
+
+    const result = {
+      compacted: true,
+      entriesCompacted: toCompact.length,
+      tokensBefore: toCompact.reduce((sum, e) => sum + e.tokens, 0),
+      tokensAfter: summaryTokens,
+      tokensSaved: savedTokens,
+    };
+
+    this.emit('compaction:completed', result);
+    return result;
+  }
+
+  /**
+   * Summarize entries (placeholder - in production use LLM)
+   */
+  summarizeEntries(entries) {
+    // In production, this would call an LLM to summarize
+    // For now, create a simple extractive summary
+    const keyPoints = entries
+      .filter(e => e.role === 'user' || e.role === 'assistant')
+      .map(e => {
+        const preview = e.content.substring(0, 100);
+        return `- ${e.role}: ${preview}${e.content.length > 100 ? '...' : ''}`;
+      });
+
+    return keyPoints.join('\n');
+  }
+
+  /**
+   * Get formatted context for LLM
+   */
+  getContextForLLM() {
+    return this.sessionHistory.map(entry => ({
+      role: entry.role,
+      content: entry.content,
+    }));
+  }
+
+  /**
+   * Get context statistics
+   */
+  getStats() {
+    const usage = this.estimateCurrentUsage();
+    const limit = this.getContextLimit();
+    
+    return {
+      model: this.currentModel,
+      limit,
+      used: usage,
+      available: limit - usage - this.safetyMargin,
+      usageRatio: usage / limit,
+      entryCount: this.sessionHistory.length,
+      compactedEntries: this.sessionHistory.filter(e => e.compacted).length,
+      compactionCount: this.compactionCount,
+      totalTokensSaved: this.totalTokensSaved,
+    };
+  }
+
+  /**
+   * Clear session history
+   */
+  clear() {
+    const count = this.sessionHistory.length;
+    this.sessionHistory = [];
+    this.emit('history:cleared', { entriesCleared: count });
+    return { cleared: count };
+  }
+
+  /**
+   * Export session for persistence
+   */
+  export() {
+    return {
+      model: this.currentModel,
+      entries: this.sessionHistory,
+      compactionCount: this.compactionCount,
+      totalTokensSaved: this.totalTokensSaved,
+    };
+  }
+
+  /**
+   * Import session from persistence
+   */
+  import(data) {
+    this.currentModel = data.model || this.currentModel;
+    this.sessionHistory = data.entries || [];
+    this.compactionCount = data.compactionCount || 0;
+    this.totalTokensSaved = data.totalTokensSaved || 0;
+    this.emit('history:imported', { entries: this.sessionHistory.length });
+    return { imported: this.sessionHistory.length };
+  }
+}
+
+/**
+ * Context Window Manager
+ * Manages guards for multiple sessions
+ */
+export class ContextWindowManager extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.guards = new Map();
+    this.defaultOptions = options;
+  }
+
+  /**
+   * Get or create guard for session
+   */
+  getGuard(sessionId, options = {}) {
+    if (!this.guards.has(sessionId)) {
+      const guard = new ContextWindowGuard({ ...this.defaultOptions, ...options });
+      
+      // Forward events
+      guard.on('space:check', (data) => this.emit('guard:space:check', { sessionId, ...data }));
+      guard.on('compaction:completed', (data) => this.emit('guard:compaction', { sessionId, ...data }));
+      
+      this.guards.set(sessionId, guard);
+    }
+    return this.guards.get(sessionId);
+  }
+
+  /**
+   * Remove guard for session
+   */
+  removeGuard(sessionId) {
+    this.guards.delete(sessionId);
+    this.emit('guard:removed', { sessionId });
+  }
+
+  /**
+   * Get all stats
+   */
+  getAllStats() {
+    const stats = {};
+    for (const [sessionId, guard] of this.guards) {
+      stats[sessionId] = guard.getStats();
+    }
+    return stats;
+  }
+}
+
+// Factory functions
+export function createContextGuard(options = {}) {
+  return new ContextWindowGuard(options);
+}
+
+export function createContextManager(options = {}) {
+  return new ContextWindowManager(options);
+}
+
+// Default export
+export default ContextWindowGuard;
