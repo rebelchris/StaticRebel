@@ -2,21 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs/promises';
 
-// Skills lib is at ../../../lib/skills relative to dashboard root
-// process.cwd() in Next.js dev returns the dashboard directory
-function getProjectRoot() {
-  // Go up from dashboard to project root
-  return path.resolve(process.cwd(), '..');
+// Detect project root - handles both:
+// 1. Running from dashboard/ (npm run dev from dashboard)
+// 2. Running from project root (npm run dev from root)
+async function getProjectRoot() {
+  const cwd = process.cwd();
+  
+  // Check if we're in the dashboard directory
+  if (cwd.endsWith('/dashboard') || cwd.endsWith('\\dashboard')) {
+    return path.resolve(cwd, '..');
+  }
+  
+  // Check if lib/skills exists in cwd (we're at project root)
+  try {
+    await fs.access(path.join(cwd, 'lib', 'skills', 'index.js'));
+    return cwd;
+  } catch {
+    // Try parent
+    try {
+      await fs.access(path.join(cwd, '..', 'lib', 'skills', 'index.js'));
+      return path.resolve(cwd, '..');
+    } catch {
+      throw new Error(`Cannot find skills lib. cwd=${cwd}`);
+    }
+  }
 }
 
 // Lazy-loaded skill manager singleton
 let skillManagerInstance: any = null;
 let goalTrackerInstance: any = null;
+let projectRoot: string | null = null;
+
+async function getRoot() {
+  if (!projectRoot) {
+    projectRoot = await getProjectRoot();
+  }
+  return projectRoot;
+}
 
 async function getSkillManager() {
   if (skillManagerInstance) return skillManagerInstance;
   
-  const root = getProjectRoot();
+  const root = await getRoot();
   const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
   
   try {
@@ -37,7 +64,7 @@ async function getSkillManager() {
 async function getGoalTracker() {
   if (goalTrackerInstance) return goalTrackerInstance;
   
-  const root = getProjectRoot();
+  const root = await getRoot();
   const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
   
   const mod = await import(skillsPath);
@@ -118,6 +145,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Skill name is required' }, { status: 400 });
     }
     
+    // Clear cache to get fresh data
+    skillManagerInstance = null;
     const sm = await getSkillManager();
     
     const schema: any = { type: dataType || 'numeric' };
@@ -130,6 +159,7 @@ export async function POST(request: NextRequest) {
     });
     
     if (dailyGoal) {
+      goalTrackerInstance = null;
       const goals = await getGoalTracker();
       await goals.setGoal(skill.id, { daily: dailyGoal, unit: unit || '' });
     }

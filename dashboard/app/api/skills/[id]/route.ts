@@ -1,18 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
+import fs from 'fs/promises';
 
-function getProjectRoot() {
-  return path.resolve(process.cwd(), '..');
+// Detect project root
+async function getProjectRoot() {
+  const cwd = process.cwd();
+  
+  if (cwd.endsWith('/dashboard') || cwd.endsWith('\\dashboard')) {
+    return path.resolve(cwd, '..');
+  }
+  
+  try {
+    await fs.access(path.join(cwd, 'lib', 'skills', 'index.js'));
+    return cwd;
+  } catch {
+    try {
+      await fs.access(path.join(cwd, '..', 'lib', 'skills', 'index.js'));
+      return path.resolve(cwd, '..');
+    } catch {
+      throw new Error(`Cannot find skills lib. cwd=${cwd}`);
+    }
+  }
 }
 
-// Lazy-loaded instances
 let skillManagerInstance: any = null;
 let goalTrackerInstance: any = null;
+let projectRoot: string | null = null;
+
+async function getRoot() {
+  if (!projectRoot) {
+    projectRoot = await getProjectRoot();
+  }
+  return projectRoot;
+}
 
 async function getSkillManager() {
   if (skillManagerInstance) return skillManagerInstance;
   
-  const root = getProjectRoot();
+  const root = await getRoot();
   const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
   
   const mod = await import(skillsPath);
@@ -28,7 +53,7 @@ async function getSkillManager() {
 async function getGoalTracker() {
   if (goalTrackerInstance) return goalTrackerInstance;
   
-  const root = getProjectRoot();
+  const root = await getRoot();
   const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
   
   const mod = await import(skillsPath);
@@ -82,8 +107,10 @@ export async function POST(
     const { id } = params;
     const data = await request.json();
     
-    // Clear singleton to get fresh data
+    // Clear cache to get fresh data
     skillManagerInstance = null;
+    goalTrackerInstance = null;
+    
     const sm = await getSkillManager();
     
     if (!sm.skills.has(id)) {
@@ -92,8 +119,6 @@ export async function POST(
     
     const entry = await sm.addEntry(id, data);
     
-    // Check goal progress
-    goalTrackerInstance = null;
     const goals = await getGoalTracker();
     const goal = goals.getGoal(id);
     let goalProgress = null;
