@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import http from 'http';
 import os from 'os';
@@ -10,65 +10,107 @@ const TRACKERS_DIR = path.join(os.homedir(), '.static-rebel', 'trackers');
 const TRACKERS_REGISTRY = path.join(TRACKERS_DIR, 'trackers.json');
 
 // ============================================================================
+// Helper functions for async file operations
+// ============================================================================
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readJsonFile(filePath, defaultValue = null) {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return JSON.parse(content);
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      console.error(`Failed to read ${filePath}:`, e.message);
+    }
+    return defaultValue;
+  }
+}
+
+async function writeJsonFile(filePath, data) {
+  try {
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    return true;
+  } catch (e) {
+    console.error(`Failed to write ${filePath}:`, e.message);
+    return false;
+  }
+}
+
+// ============================================================================
 // Tracker Store - CRUD operations for trackers and records
 // ============================================================================
 
 class TrackerStore {
   constructor() {
-    this.ensureDir();
+    this._initialized = false;
+    this._initPromise = null;
   }
 
-  ensureDir() {
-    if (!fs.existsSync(TRACKERS_DIR)) {
-      fs.mkdirSync(TRACKERS_DIR, { recursive: true });
+  /**
+   * Ensure the tracker directory exists (async)
+   */
+  async ensureDir() {
+    if (this._initialized) return;
+    
+    // Use a promise to prevent concurrent initialization
+    if (this._initPromise) {
+      return this._initPromise;
     }
-  }
 
-  loadRegistry() {
-    try {
-      if (fs.existsSync(TRACKERS_REGISTRY)) {
-        return JSON.parse(fs.readFileSync(TRACKERS_REGISTRY, 'utf-8'));
+    this._initPromise = (async () => {
+      const exists = await fileExists(TRACKERS_DIR);
+      if (!exists) {
+        await fs.mkdir(TRACKERS_DIR, { recursive: true });
       }
-    } catch (e) {
-      console.error('Failed to load tracker registry:', e.message);
-    }
-    return { trackers: [] };
+      this._initialized = true;
+    })();
+
+    return this._initPromise;
   }
 
-  saveRegistry(data) {
-    try {
-      fs.writeFileSync(TRACKERS_REGISTRY, JSON.stringify(data, null, 2));
-      return true;
-    } catch (e) {
-      console.error('Failed to save tracker registry:', e.message);
-      return false;
-    }
+  async loadRegistry() {
+    await this.ensureDir();
+    const data = await readJsonFile(TRACKERS_REGISTRY, { trackers: [] });
+    return data;
   }
 
-  listTrackers() {
-    const registry = this.loadRegistry();
+  async saveRegistry(data) {
+    await this.ensureDir();
+    return writeJsonFile(TRACKERS_REGISTRY, data);
+  }
+
+  async listTrackers() {
+    const registry = await this.loadRegistry();
     return registry.trackers;
   }
 
-  getTracker(id) {
-    const registry = this.loadRegistry();
+  async getTracker(id) {
+    const registry = await this.loadRegistry();
     return registry.trackers.find((t) => t.id === id);
   }
 
-  createTracker(tracker) {
-    const registry = this.loadRegistry();
+  async createTracker(tracker) {
+    const registry = await this.loadRegistry();
     tracker.id = tracker.id || `tracker-${Date.now()}`;
     tracker.createdAt = new Date().toISOString();
     tracker.updatedAt = tracker.createdAt;
     // Ensure displayName is set
     tracker.displayName = tracker.displayName || tracker.name || 'Tracker';
     registry.trackers.push(tracker);
-    this.saveRegistry(registry);
+    await this.saveRegistry(registry);
     return tracker;
   }
 
-  updateTracker(id, updates) {
-    const registry = this.loadRegistry();
+  async updateTracker(id, updates) {
+    const registry = await this.loadRegistry();
     const index = registry.trackers.findIndex((t) => t.id === id);
     if (index === -1) return null;
 
@@ -77,17 +119,17 @@ class TrackerStore {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
-    this.saveRegistry(registry);
+    await this.saveRegistry(registry);
     return registry.trackers[index];
   }
 
-  deleteTracker(id) {
-    const registry = this.loadRegistry();
+  async deleteTracker(id) {
+    const registry = await this.loadRegistry();
     const index = registry.trackers.findIndex((t) => t.id === id);
     if (index === -1) return false;
 
     registry.trackers.splice(index, 1);
-    this.saveRegistry(registry);
+    await this.saveRegistry(registry);
     return true;
   }
 
@@ -96,69 +138,59 @@ class TrackerStore {
     return path.join(TRACKERS_DIR, `${trackerId}.json`);
   }
 
-  loadRecords(trackerId) {
+  async loadRecords(trackerId) {
+    await this.ensureDir();
     const file = this.getRecordsFile(trackerId);
-    try {
-      if (fs.existsSync(file)) {
-        return JSON.parse(fs.readFileSync(file, 'utf-8'));
-      }
-    } catch (e) {
-      console.error('Failed to load records:', e.message);
-    }
-    return { records: [] };
+    const data = await readJsonFile(file, { records: [] });
+    return data;
   }
 
-  saveRecords(trackerId, data) {
+  async saveRecords(trackerId, data) {
+    await this.ensureDir();
     const file = this.getRecordsFile(trackerId);
-    try {
-      fs.writeFileSync(file, JSON.stringify(data, null, 2));
-      return true;
-    } catch (e) {
-      console.error('Failed to save records:', e.message);
-      return false;
-    }
+    return writeJsonFile(file, data);
   }
 
-  addRecord(trackerId, record) {
-    const data = this.loadRecords(trackerId);
+  async addRecord(trackerId, record) {
+    const data = await this.loadRecords(trackerId);
     record.id = record.id || `record-${Date.now()}`;
     record.timestamp = new Date().toISOString();
     data.records.push(record);
-    this.saveRecords(trackerId, data);
+    await this.saveRecords(trackerId, data);
 
     // Update tracker stats
-    this.updateTrackerStats(trackerId);
+    await this.updateTrackerStats(trackerId);
 
     return record;
   }
 
-  updateTrackerStats(trackerId) {
-    const data = this.loadRecords(trackerId);
+  async updateTrackerStats(trackerId) {
+    const data = await this.loadRecords(trackerId);
     const count = data.records.length;
     const lastEntry = data.records[data.records.length - 1]?.timestamp;
-    this.updateTracker(trackerId, { count, lastEntry });
+    await this.updateTracker(trackerId, { count, lastEntry });
   }
 
   /**
    * Get records for a tracker (alias for loadRecords for compatibility)
    */
-  getRecords(trackerId) {
+  async getRecords(trackerId) {
     return this.loadRecords(trackerId);
   }
 
   /**
    * Get entries for a tracker (alias for getRecords for dashboard compatibility)
    */
-  getEntries(trackerId) {
-    const data = this.loadRecords(trackerId);
+  async getEntries(trackerId) {
+    const data = await this.loadRecords(trackerId);
     return data.records || [];
   }
 
   /**
    * Get records by date range
    */
-  getRecordsByDateRange(trackerId, startDate, endDate) {
-    const data = this.loadRecords(trackerId);
+  async getRecordsByDateRange(trackerId, startDate, endDate) {
+    const data = await this.loadRecords(trackerId);
     if (!startDate && !endDate) {
       return data;
     }
@@ -184,8 +216,8 @@ class QueryEngine {
   }
 
   async query(trackerId, question) {
-    const tracker = this.store.getTracker(trackerId);
-    const data = this.store.loadRecords(trackerId);
+    const tracker = await this.store.getTracker(trackerId);
+    const data = await this.store.loadRecords(trackerId);
 
     const prompt = `You are analyzing tracker data. Answer the user's question based on the data provided.
 
@@ -238,8 +270,8 @@ Provide a concise, helpful answer based on the data. If you need to calculate to
     });
   }
 
-  getStats(trackerId) {
-    const data = this.store.loadRecords(trackerId);
+  async getStats(trackerId) {
+    const data = await this.store.loadRecords(trackerId);
     const records = data.records;
 
     if (records.length === 0) {
