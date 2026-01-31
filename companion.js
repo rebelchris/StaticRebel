@@ -159,17 +159,34 @@ export function setState(companion, state) {
   companion.render();
 }
 
-export function reactToEvent(companion, event) {
+export function reactToEvent(companionOrEvent, event = null) {
+  // Support both reactToEvent(companion, event) and reactToEvent(event)
+  let companion = companionOrEvent;
+  let eventName = event;
+  
+  if (typeof companionOrEvent === 'string') {
+    // Called as reactToEvent('event') - no companion passed
+    eventName = companionOrEvent;
+    companion = null;
+  }
+  
   const eventMoods = {
     success: 'celebrating',
     error: 'tired',
     thinking: 'thinking',
     complete: 'happy',
+    greeting: 'happy',
+    memory_stored: 'happy',
+    workout_logged: 'celebrating',
   };
 
-  const mood = eventMoods[event] || 'idle';
-  companion.setMood(mood);
-  companion.render();
+  const mood = eventMoods[eventName] || 'idle';
+  
+  // Only call companion methods if companion exists and has the method
+  if (companion && typeof companion.setMood === 'function') {
+    companion.setMood(mood);
+    companion.render();
+  }
 }
 
 export function setStats(companion, stats) {
