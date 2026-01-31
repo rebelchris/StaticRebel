@@ -1,17 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 
-async function getSkillManager() {
-  const skillsPath = path.join(process.cwd(), '..', 'lib', 'skills', 'index.js');
-  const { getSkillManager } = await import(skillsPath);
-  return getSkillManager();
+function getProjectRoot() {
+  return path.resolve(process.cwd(), '..');
 }
 
-async function getGoalTracker(dataDir: string) {
-  const skillsPath = path.join(process.cwd(), '..', 'lib', 'skills', 'index.js');
-  const { GoalTracker } = await import(skillsPath);
-  const tracker = new GoalTracker(dataDir);
+// Lazy-loaded instances
+let skillManagerInstance: any = null;
+let goalTrackerInstance: any = null;
+
+async function getSkillManager() {
+  if (skillManagerInstance) return skillManagerInstance;
+  
+  const root = getProjectRoot();
+  const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
+  
+  const mod = await import(skillsPath);
+  const sm = new mod.SkillManager({
+    skillsDir: path.join(root, 'skills'),
+    dataDir: path.join(root, 'data')
+  });
+  await sm.init();
+  skillManagerInstance = sm;
+  return sm;
+}
+
+async function getGoalTracker() {
+  if (goalTrackerInstance) return goalTrackerInstance;
+  
+  const root = getProjectRoot();
+  const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
+  
+  const mod = await import(skillsPath);
+  const tracker = new mod.GoalTracker(path.join(root, 'data'));
   await tracker.init();
+  goalTrackerInstance = tracker;
   return tracker;
 }
 
@@ -31,7 +54,7 @@ export async function GET(
     const entries = await sm.getEntries(id);
     const stats = await sm.getStats(id);
     
-    const goals = await getGoalTracker(sm.dataDir);
+    const goals = await getGoalTracker();
     const goal = goals.getGoal(id);
     const streak = goals.calculateStreak(entries);
     
@@ -45,13 +68,12 @@ export async function GET(
       goal,
       streak
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Skill fetch error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// POST - Add entry to skill
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -60,6 +82,8 @@ export async function POST(
     const { id } = params;
     const data = await request.json();
     
+    // Clear singleton to get fresh data
+    skillManagerInstance = null;
     const sm = await getSkillManager();
     
     if (!sm.skills.has(id)) {
@@ -69,7 +93,8 @@ export async function POST(
     const entry = await sm.addEntry(id, data);
     
     // Check goal progress
-    const goals = await getGoalTracker(sm.dataDir);
+    goalTrackerInstance = null;
+    const goals = await getGoalTracker();
     const goal = goals.getGoal(id);
     let goalProgress = null;
     
@@ -87,7 +112,6 @@ export async function POST(
       };
     }
     
-    // Get streak
     const allEntries = await sm.getEntries(id);
     const streak = goals.calculateStreak(allEntries);
     
@@ -97,25 +121,15 @@ export async function POST(
       goalProgress,
       streak
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Entry add error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// DELETE - Delete a skill
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const { id } = params;
-    const sm = await getSkillManager();
-    
-    // For now, just return not implemented
-    // Would need to add deleteSkill method to SkillManager
-    return NextResponse.json({ error: 'Delete not implemented' }, { status: 501 });
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
-  }
+  return NextResponse.json({ error: 'Delete not implemented' }, { status: 501 });
 }

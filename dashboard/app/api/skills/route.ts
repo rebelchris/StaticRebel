@@ -1,25 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
+import fs from 'fs/promises';
 
-// Dynamic import of skill manager (ESM)
-async function getSkillManager() {
-  const skillsPath = path.join(process.cwd(), '..', 'lib', 'skills', 'index.js');
-  const { getSkillManager } = await import(skillsPath);
-  return getSkillManager();
+// Skills lib is at ../../../lib/skills relative to dashboard root
+// process.cwd() in Next.js dev returns the dashboard directory
+function getProjectRoot() {
+  // Go up from dashboard to project root
+  return path.resolve(process.cwd(), '..');
 }
 
-async function getGoalTracker(dataDir: string) {
-  const skillsPath = path.join(process.cwd(), '..', 'lib', 'skills', 'index.js');
-  const { GoalTracker } = await import(skillsPath);
-  const tracker = new GoalTracker(dataDir);
+// Lazy-loaded skill manager singleton
+let skillManagerInstance: any = null;
+let goalTrackerInstance: any = null;
+
+async function getSkillManager() {
+  if (skillManagerInstance) return skillManagerInstance;
+  
+  const root = getProjectRoot();
+  const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
+  
+  try {
+    const mod = await import(skillsPath);
+    const sm = new mod.SkillManager({
+      skillsDir: path.join(root, 'skills'),
+      dataDir: path.join(root, 'data')
+    });
+    await sm.init();
+    skillManagerInstance = sm;
+    return sm;
+  } catch (error: any) {
+    console.error('Failed to load skills module from:', skillsPath);
+    throw new Error(`Cannot load skills: ${error.message}`);
+  }
+}
+
+async function getGoalTracker() {
+  if (goalTrackerInstance) return goalTrackerInstance;
+  
+  const root = getProjectRoot();
+  const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
+  
+  const mod = await import(skillsPath);
+  const tracker = new mod.GoalTracker(path.join(root, 'data'));
   await tracker.init();
+  goalTrackerInstance = tracker;
   return tracker;
 }
 
 export async function GET() {
   try {
     const sm = await getSkillManager();
-    const goals = await getGoalTracker(sm.dataDir);
+    const goals = await getGoalTracker();
     
     const today = new Date().toISOString().split('T')[0];
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -73,9 +104,9 @@ export async function GET() {
     }
     
     return NextResponse.json({ skills, generatedAt: Date.now() });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Skills fetch error:', error);
-    return NextResponse.json({ skills: [], error: String(error) });
+    return NextResponse.json({ skills: [], error: error.message });
   }
 }
 
@@ -99,13 +130,13 @@ export async function POST(request: NextRequest) {
     });
     
     if (dailyGoal) {
-      const goals = await getGoalTracker(sm.dataDir);
+      const goals = await getGoalTracker();
       await goals.setGoal(skill.id, { daily: dailyGoal, unit: unit || '' });
     }
     
     return NextResponse.json({ success: true, skill });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Skill create error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
