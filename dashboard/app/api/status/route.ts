@@ -1,27 +1,12 @@
 import { NextResponse } from 'next/server';
 import os from 'os';
-import path from 'path';
-
-// Helper to safely import lib modules
-async function loadModule(moduleName: string) {
-  try {
-    const modulePath = path.join(process.cwd(), '..', 'lib', `${moduleName}.js`);
-    return await import(modulePath);
-  } catch (error) {
-    return null;
-  }
-}
+import { getActivePersona, getAvailablePersonas } from '@/lib/personaManager.js';
+import { getMemoryStats } from '@/lib/vectorMemory.js';
+import { getWorkerStats } from '@/lib/workerManager.js';
+import { TrackerStore } from '@/tracker.js';
 
 export async function GET() {
   try {
-    // Try to load modules
-    const [personaManager, vectorMemory, workerManager, configManager] = await Promise.all([
-      loadModule('personaManager'),
-      loadModule('vectorMemory'),
-      loadModule('workerManager'),
-      loadModule('configManager'),
-    ]);
-
     const status = {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
@@ -50,35 +35,46 @@ export async function GET() {
     };
 
     // Get persona info
-    if (personaManager?.getActivePersona) {
-      status.personas.active = personaManager.getActivePersona();
-    }
-    if (personaManager?.getAvailablePersonas) {
-      const personas = personaManager.getAvailablePersonas();
+    try {
+      status.personas.active = getActivePersona();
+      const personas = getAvailablePersonas();
       status.personas.available = Object.values(personas);
       status.personas.stats.total = Object.keys(personas).length;
+    } catch (e) {
+      // Persona manager not available
     }
 
     // Get memory stats
-    if (vectorMemory?.getMemoryStats) {
-      status.memory.vector = vectorMemory.getMemoryStats();
+    try {
+      const memStats = getMemoryStats();
+      status.memory.vector = {
+        total: memStats.totalMemories || 0,
+        byType: memStats.byType || {},
+      };
+    } catch (e) {
+      // Memory stats not available
     }
 
     // Get worker stats
-    if (workerManager?.getWorkerStats) {
-      status.workers.stats = workerManager.getWorkerStats();
+    try {
+      const workerStats = getWorkerStats();
+      status.workers.stats = {
+        total: workerStats.totalTasks || 0,
+        pending: workerStats.pending || 0,
+        running: workerStats.running || 0,
+        completed: workerStats.completed || 0,
+        failed: workerStats.failed || 0,
+      };
+    } catch (e) {
+      // Worker stats not available
     }
 
     // Try to get tracker stats
     try {
-      const trackerPath = path.join(process.cwd(), '..', 'tracker.js');
-      const trackerModule = await import(trackerPath);
-      if (trackerModule?.TrackerStore) {
-        const store = new trackerModule.TrackerStore();
-        const trackers = store.listTrackers();
-        status.trackers.list = trackers;
-        status.trackers.stats.total = trackers.length;
-      }
+      const store = new TrackerStore();
+      const trackers = store.listTrackers();
+      status.trackers.list = trackers;
+      status.trackers.stats.total = trackers.length;
     } catch (e) {
       // Tracker not available
     }

@@ -39,7 +39,8 @@
       "Bash(timeout 10 npm run dev:*)",
       "Bash(npm run dev:*)",
       "Bash(lsof:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(git push:*)"
     ]
   }
 }

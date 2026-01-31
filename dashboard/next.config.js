@@ -3,6 +3,11 @@ const nextConfig = {
   // Allow importing from parent directory (lib folder)
   transpilePackages: [],
 
+  // Set environment variable for Next.js detection
+  env: {
+    RUNNING_IN_NEXTJS: 'true',
+  },
+
   // Experimental features for better performance
   experimental: {
     // Enable server actions for form handling

@@ -18,11 +18,12 @@ function log(name, message, color = '\x1b[0m') {
   console.log(`${color}[${timestamp}] [${name}] ${message}\x1b[0m`);
 }
 
-function startProcess(name, script, color) {
-  const proc = spawn('node', [script], {
+function startProcess(name, command, args, color) {
+  const proc = spawn(command, args, {
     cwd: __dirname,
     stdio: ['inherit', 'pipe', 'pipe'],
     env: { ...process.env, FORCE_COLOR: '1' },
+    shell: process.platform === 'win32',
   });
 
   proc.stdout.on('data', (data) => {
@@ -69,9 +70,9 @@ process.on('SIGINT', () => {
 log('START', 'Starting Static Rebel services...', '\x1b[36m');
 
 // Start Dashboard
-startProcess('DASHBOARD', 'dashboard/server.js', '\x1b[35m');
+startProcess('DASHBOARD', 'npm', ['run', 'dashboard'], '\x1b[35m');
 
-// Start Assistant (with Telegram bot)
-startProcess('ASSISTANT', 'assistant.js', '\x1b[34m');
+// Start Assistant
+startProcess('ASSISTANT', 'npm', ['run', 'assistant'], '\x1b[34m');
 
 log('START', 'All services started! Press Ctrl+C to stop.', '\x1b[32m');
