@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Activity, Plus, Target, Flame, TrendingUp, ChevronRight } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Activity, Plus, Target, Flame, TrendingUp, ChevronRight, Send, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Skill {
@@ -34,6 +34,9 @@ export default function Skills() {
   const [showModal, setShowModal] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [logValue, setLogValue] = useState('');
+  const [nlpInput, setNlpInput] = useState('');
+  const [nlpStatus, setNlpStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [nlpLoading, setNlpLoading] = useState(false);
 
   useEffect(() => {
     fetchSkills();
@@ -73,6 +76,38 @@ export default function Skills() {
     }
   };
 
+  const handleNlpLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nlpInput.trim() || nlpLoading) return;
+    
+    setNlpLoading(true);
+    setNlpStatus(null);
+    
+    try {
+      const response = await fetch('/api/skills/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: nlpInput })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setNlpStatus({ type: 'success', message: data.message });
+        setNlpInput('');
+        fetchSkills();
+        // Clear success message after 3s
+        setTimeout(() => setNlpStatus(null), 3000);
+      } else {
+        setNlpStatus({ type: 'error', message: data.error });
+      }
+    } catch (error) {
+      setNlpStatus({ type: 'error', message: 'Failed to log entry' });
+    } finally {
+      setNlpLoading(false);
+    }
+  };
+
   const getProgressPercent = (skill: Skill) => {
     if (!skill.goal?.daily) return 0;
     return Math.min(100, Math.round((skill.stats.todaySum / skill.goal.daily) * 100));
@@ -85,7 +120,7 @@ export default function Skills() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-8 flex justify-between items-center">
+      <div className="mb-6 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Skills</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -100,6 +135,55 @@ export default function Skills() {
           New Skill
         </button>
       </div>
+
+      {/* Natural Language Input */}
+      <form onSubmit={handleNlpLog} className="mb-8">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Sparkles className="h-5 w-5 text-blue-500" />
+          </div>
+          <input
+            type="text"
+            value={nlpInput}
+            onChange={(e) => setNlpInput(e.target.value)}
+            placeholder="Type naturally: &quot;drank 500ml water&quot;, &quot;mood 7&quot;, &quot;ran 5k&quot;..."
+            className="block w-full pl-12 pr-24 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-lg"
+            disabled={nlpLoading}
+          />
+          <button
+            type="submit"
+            disabled={!nlpInput.trim() || nlpLoading}
+            className="absolute inset-y-2 right-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {nlpLoading ? (
+              <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Log
+              </>
+            )}
+          </button>
+        </div>
+        
+        {/* Status message */}
+        <AnimatePresence>
+          {nlpStatus && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className={`mt-2 px-4 py-2 rounded-lg text-sm ${
+                nlpStatus.type === 'success' 
+                  ? 'bg-green-50 text-green-700' 
+                  : 'bg-red-50 text-red-700'
+              }`}
+            >
+              {nlpStatus.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </form>
 
       {/* Skills Grid */}
       {loading ? (
