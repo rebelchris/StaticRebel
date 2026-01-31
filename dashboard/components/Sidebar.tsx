@@ -14,6 +14,7 @@ import {
   UserCircle,
   Server,
   Cog,
+  Target,
 } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
@@ -21,6 +22,7 @@ import { clsx } from 'clsx';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
+  { name: 'Skills', href: '/skills', icon: Target },
   { name: 'Personas', href: '/personas', icon: UserCircle },
   { name: 'Memory', href: '/memory', icon: Brain },
   { name: 'Workers', href: '/workers', icon: Server },
