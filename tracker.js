@@ -35,11 +35,21 @@ async function readJsonFile(filePath, defaultValue = null) {
 }
 
 async function writeJsonFile(filePath, data) {
+  // Use atomic write pattern: write to temp file, then rename
+  // This prevents data corruption if the process crashes mid-write
+  const tempPath = `${filePath}.${process.pid}.tmp`;
   try {
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
+    await fs.rename(tempPath, filePath);
     return true;
   } catch (e) {
     console.error(`Failed to write ${filePath}:`, e.message);
+    // Clean up temp file if it exists
+    try {
+      await fs.unlink(tempPath);
+    } catch {
+      // Ignore cleanup errors
+    }
     return false;
   }
 }
