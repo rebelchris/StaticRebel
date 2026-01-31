@@ -2394,7 +2394,7 @@ async function detectAndExecuteActionIntents(llmResponse, userInput) {
   try {
     const trackStore = new TrackerStore();
     const queryEngine = new QueryEngine();
-    const trackers = trackStore.listTrackers();
+    const trackers = await trackStore.listTrackers();
 
     if (trackers.length === 0) {
       return null;
@@ -2515,7 +2515,7 @@ async function routeNaturalLanguageQuery(userInput) {
   try {
     const trackStore = new TrackerStore();
     const queryEngine = new QueryEngine();
-    const trackers = trackStore.listTrackers();
+    const trackers = await trackStore.listTrackers();
 
     if (trackers.length === 0) {
       return null; // No trackers to query
@@ -2911,7 +2911,7 @@ async function detectAndRouteTrackableData(userInput) {
     }
 
     const trackStore = new TrackerStore();
-    const trackers = trackStore.listTrackers();
+    const trackers = await trackStore.listTrackers();
 
     // Check if this is an undo/delete request
     if (detectUndo(userInput) && trackers.length > 0) {
@@ -3155,7 +3155,7 @@ async function chat() {
     if (trimmed.startsWith('@')) {
       const mentionPart = trimmed.slice(1).toLowerCase();
       const trackStore = new TrackerStore();
-      const trackers = trackStore.listTrackers();
+      const trackers = await trackStore.listTrackers();
       const trackerMatches = trackers
         .filter(
           (t) =>
@@ -3180,7 +3180,13 @@ async function chat() {
     input: process.stdin,
     output: process.stdout,
     completer: completer,
+    terminal: process.stdin.isTTY,
   });
+  
+  // Prevent duplicate character display on some terminals
+  if (process.stdin.isTTY && process.stdin.setRawMode) {
+    // Let readline handle raw mode - don't interfere
+  }
 
   // Check and build profile if needed
   const profile = loadProfile();
@@ -3190,7 +3196,7 @@ async function chat() {
 
   // Initialize companion with current stats
   const trackStore = new TrackerStore();
-  const trackers = trackStore.listTrackers();
+  const trackers = await trackStore.listTrackers();
   const mems = memory.list();
   setStats({
     trackersActive: trackers.length,
@@ -4094,7 +4100,7 @@ async function chat() {
 
           if (action === 'list' || !action) {
             // List all trackers
-            const trackers = trackStore.listTrackers();
+            const trackers = await trackStore.listTrackers();
             console.log('\n  Trackers:\n');
             if (trackers.length === 0) {
               console.log('    No trackers defined. Create one with:');
@@ -5035,7 +5041,7 @@ Respond with JSON containing a "data" object with the extracted values.`;
           try {
             const trackStore = new TrackerStore();
             const queryEngine = new QueryEngine();
-            const trackers = trackStore.listTrackers();
+            const trackers = await trackStore.listTrackers();
 
             if (trackers.length > 0) {
               const trackerList = trackers
@@ -5219,7 +5225,7 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
             try {
               const trackStore = new TrackerStore();
               const queryEngine = new QueryEngine();
-              const trackers = trackStore.listTrackers();
+              const trackers = await trackStore.listTrackers();
               const insights = generateProactiveInsights(
                 trackers,
                 trackStore,
