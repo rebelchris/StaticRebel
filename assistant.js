@@ -3111,7 +3111,17 @@ Examples:
 async function chat() {
   const availableModels = await listAvailableModels();
 
+  // Pre-load trackers for autocomplete (completer must be sync)
+  const trackStoreForComplete = new TrackerStore();
+  let cachedTrackers = [];
+  try {
+    cachedTrackers = await trackStoreForComplete.listTrackers();
+  } catch (e) {
+    // Ignore - trackers just won't autocomplete
+  }
+
   // Autocomplete function for / commands and @ tracker mentions
+  // NOTE: This must be synchronous - readline doesn't support async completers
   const completer = (line) => {
     const trimmed = line.trim();
     const lower = trimmed.toLowerCase();
@@ -3151,12 +3161,10 @@ async function chat() {
       return [matches.length ? matches.map((m) => m + ' ') : [], line];
     }
 
-    // @ tracker mention completions
+    // @ tracker mention completions (uses cached trackers - completer must be sync)
     if (trimmed.startsWith('@')) {
       const mentionPart = trimmed.slice(1).toLowerCase();
-      const trackStore = new TrackerStore();
-      const trackers = await trackStore.listTrackers();
-      const trackerMatches = trackers
+      const trackerMatches = cachedTrackers
         .filter(
           (t) =>
             t.name.toLowerCase().startsWith(mentionPart) ||
