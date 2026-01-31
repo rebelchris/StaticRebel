@@ -2,30 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import os from 'os';
 
-// Skills system paths - always use home directory
 const STATIC_REBEL_DIR = path.join(os.homedir(), '.static-rebel');
 const SKILLS_DIR = path.join(STATIC_REBEL_DIR, 'skills');
 const DATA_DIR = path.join(STATIC_REBEL_DIR, 'data');
 
-// Lazy-loaded skill manager singleton
-let skillManagerInstance: any = null;
-
+// Always create fresh instance to pick up new skills
 async function getSkillManager() {
-  if (skillManagerInstance) return skillManagerInstance;
-  
-  try {
-    const SkillManagerModule = await import('../../../../lib/skills/skill-manager.js');
-    const sm = new SkillManagerModule.SkillManager({
-      skillsDir: SKILLS_DIR,
-      dataDir: DATA_DIR
-    });
-    await sm.init();
-    skillManagerInstance = sm;
-    return sm;
-  } catch (error: any) {
-    console.error('Failed to load skills module:', error.message);
-    throw new Error(`Cannot load skills: ${error.message}`);
-  }
+  const SkillManagerModule = await import('../../../../lib/skills/skill-manager.js');
+  const sm = new SkillManagerModule.SkillManager({
+    skillsDir: SKILLS_DIR,
+    dataDir: DATA_DIR
+  });
+  await sm.init();
+  return sm;
 }
 
 export async function GET() {
@@ -42,22 +31,27 @@ export async function GET() {
       const todayEntries = allEntries.filter((e: any) => e.date === today);
       const weekEntries = allEntries.filter((e: any) => e.date >= weekAgo);
       
-      const getValue = (e: any) => parseFloat(e.value) || parseFloat(e.score) || parseFloat(e.duration) || parseFloat(e.distance) || 1;
+      const getValue = (e: any) => {
+        return parseFloat(e.value) || parseFloat(e.score) || parseFloat(e.duration) || parseFloat(e.distance) || 1;
+      };
+      
       const todaySum = todayEntries.reduce((sum: number, e: any) => sum + getValue(e), 0);
       const weekSum = weekEntries.reduce((sum: number, e: any) => sum + getValue(e), 0);
       
       // Calculate streak
       const streak = calculateStreak(allEntries);
       
-      // Weekly chart data
+      // Weekly chart data (last 7 days)
       const weeklyData = [];
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const dateStr = d.toISOString().split('T')[0];
         const dayEntries = allEntries.filter((e: any) => e.date === dateStr);
         const daySum = dayEntries.reduce((sum: number, e: any) => sum + getValue(e), 0);
+        
         weeklyData.push({
           day: days[d.getDay()],
           date: dateStr,
@@ -71,7 +65,7 @@ export async function GET() {
         description: skill.description,
         icon: skill.icon || '📊',
         unit: skill.unit || '',
-        triggers: skill.triggers,
+        triggers: skill.triggers || [],
         dailyGoal: skill.dailyGoal,
         stats: {
           totalEntries: allEntries.length,
@@ -84,6 +78,9 @@ export async function GET() {
         recentEntries: allEntries.slice(0, 5)
       });
     }
+    
+    // Sort by today's activity
+    skills.sort((a, b) => b.stats.todaySum - a.stats.todaySum);
     
     return NextResponse.json({ 
       skills, 
@@ -103,11 +100,12 @@ export async function GET() {
 function calculateStreak(entries: any[]): number {
   if (entries.length === 0) return 0;
   
+  // Get unique dates sorted descending
   const dates = [...new Set(entries.map(e => e.date))].sort().reverse();
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
   
-  // Must have entry today or yesterday to have a streak
+  // Must have entry today or yesterday to have an active streak
   if (dates[0] !== today && dates[0] !== yesterday) return 0;
   
   let streak = 0;
@@ -134,8 +132,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Skill name is required' }, { status: 400 });
     }
     
-    // Clear cache to get fresh data
-    skillManagerInstance = null;
     const sm = await getSkillManager();
     
     const skill = await sm.createSkill(name, {
@@ -153,13 +149,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Force reload skills (useful after external changes)
+// Reload endpoint
 export async function PUT() {
-  skillManagerInstance = null;
-  const sm = await getSkillManager();
-  return NextResponse.json({ 
-    success: true, 
-    skillCount: sm.skills.size,
-    message: 'Skills reloaded'
-  });
+  try {
+    const sm = await getSkillManager();
+    return NextResponse.json({ 
+      success: true, 
+      skillCount: sm.skills.size,
+      message: 'Skills reloaded'
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

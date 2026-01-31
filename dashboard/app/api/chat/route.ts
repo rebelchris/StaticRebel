@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import os from 'os';
 
-// Skills system paths
 const STATIC_REBEL_DIR = path.join(os.homedir(), '.static-rebel');
+const SKILLS_DIR = path.join(STATIC_REBEL_DIR, 'skills');
+const DATA_DIR = path.join(STATIC_REBEL_DIR, 'data');
 
 // Lazy-loaded modules
 let skillManager: any = null;
@@ -13,11 +14,10 @@ async function getSkillManager() {
   if (skillManager) return skillManager;
   
   try {
-    // Dynamic import from lib/skills
     const SkillManagerModule = await import('../../../../lib/skills/skill-manager.js');
     const sm = new SkillManagerModule.SkillManager({
-      skillsDir: path.join(STATIC_REBEL_DIR, 'skills'),
-      dataDir: path.join(STATIC_REBEL_DIR, 'data')
+      skillsDir: SKILLS_DIR,
+      dataDir: DATA_DIR
     });
     await sm.init();
     skillManager = sm;
@@ -46,7 +46,7 @@ const MAX_HISTORY = 50;
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, stream = false } = await request.json();
+    const { message } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -64,22 +64,12 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    // Trim history
     if (chatHistory.length > MAX_HISTORY) {
       chatHistory = chatHistory.slice(-MAX_HISTORY);
     }
 
-    // Try to process as skill tracking
-    const skillResult = await processSkillInput(sanitizedMessage);
-    
-    let responseText: string;
-    
-    if (skillResult) {
-      responseText = skillResult;
-    } else {
-      // Not a skill command - use fallback response
-      responseText = generateResponse(sanitizedMessage);
-    }
+    // Process the message
+    const responseText = await processMessage(sanitizedMessage);
 
     // Add assistant response to history
     chatHistory.push({
@@ -91,7 +81,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       response: responseText,
       history: chatHistory.slice(-10),
-      type: skillResult ? 'skill' : 'chat',
     });
   } catch (error: any) {
     console.error('Chat API error:', error);
@@ -102,187 +91,219 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processSkillInput(message: string): Promise<string | null> {
+async function processMessage(message: string): Promise<string> {
   const parser = await getNlpParser();
   const sm = await getSkillManager();
   
   if (!parser || !sm) {
-    console.log('Skills system not available');
-    return null;
+    return "Skills system not available. Please check the server logs.";
   }
 
-  // Check if this looks like tracking intent
-  if (!parser.isTrackingIntent(message)) {
-    // Check for skill-related queries
-    const lower = message.toLowerCase();
-    
-    if (lower.includes('my skills') || lower.includes('list skills') || lower.includes('show skills')) {
-      const skills = sm.getAllSkills();
-      if (skills.length === 0) {
-        return "You don't have any skills yet. Try saying something like:\n• \"drank 500ml water\"\n• \"walked 3k steps\"\n• \"mood: great\"";
-      }
-      const list = skills.map((s: any) => `${s.icon} **${s.name}** - ${s.unit || 'entries'}`).join('\n');
-      return `📊 **Your Skills:**\n${list}`;
-    }
-    
-    if (lower.match(/how('?s| is) my (\w+)/)) {
-      const match = lower.match(/how('?s| is) my (\w+)/);
-      if (match) {
-        const skillName = match[2];
-        const skill = sm.skills.get(skillName) || 
-          Array.from(sm.skills.values()).find((s: any) => 
-            s.name.toLowerCase().includes(skillName) || s.triggers.includes(skillName)
-          );
-        
-        if (skill) {
-          const today = new Date().toISOString().split('T')[0];
-          const entries = await sm.getEntries(skill.id, { date: today });
-          const sum = entries.reduce((acc: number, e: any) => acc + (parseFloat(e.value) || 0), 0);
-          const goal = skill.dailyGoal;
-          
-          let response = `${skill.icon} **${skill.name}** today:\n`;
-          response += `${sum} ${skill.unit || 'entries'}`;
-          
-          if (goal) {
-            const pct = Math.round((sum / goal) * 100);
-            const bar = generateProgressBar(pct);
-            response += ` / ${goal} ${skill.unit || ''} (${pct}%)\n${bar}`;
-          }
-          
-          return response;
-        }
-      }
-    }
-    
-    return null;
-  }
-
-  // Parse the input
-  const parsed = parser.parseWithSuggestions(message);
+  // Check for meta commands first
+  const lower = message.toLowerCase().trim();
   
-  if (!parsed.success) {
-    return parsed.message;
+  if (lower === 'help' || lower === '?') {
+    return getHelpText();
+  }
+  
+  if (lower === 'my skills' || lower === 'list skills' || lower === 'skills') {
+    return await listSkills(sm);
   }
 
-  // Handle new skill creation
-  if (parsed.createNew && parsed.suggestedSkill) {
-    const existingSkill = sm.skills.get(parsed.suggestedSkill);
-    
-    if (!existingSkill) {
-      // Auto-create the skill
-      const newSkill = await sm.createSkill(parsed.suggestedSkill, {
-        description: `Track ${parsed.suggestedSkill}`,
-        triggers: [parsed.suggestedSkill],
-        unit: 'count'
-      });
-      
-      // Log the entry
-      const entry = await sm.addEntry(newSkill.id, parsed.entry);
-      
-      return `✨ Created new skill **${newSkill.name}**!\n\n` +
-        `${newSkill.icon} +${entry.value} logged!`;
-    } else {
-      // Skill exists, just log
-      const entry = await sm.addEntry(existingSkill.id, parsed.entry);
-      const todayStats = await sm.getTodayStats(existingSkill.id);
-      
-      return formatTrackingResponse(existingSkill, entry, todayStats);
-    }
+  // Parse the message
+  const parsed = parser.parseInput(message);
+  
+  console.log('[Chat] Parsed:', JSON.stringify(parsed, null, 2));
+
+  // Handle based on intent
+  if (parsed.intent === 'query') {
+    return await handleQuery(sm, parsed);
+  }
+  
+  if (parsed.intent === 'log' && parsed.skillId) {
+    return await handleLog(sm, parsed);
   }
 
-  // Handle known skill
-  if (parsed.skill) {
-    let skill = sm.skills.get(parsed.skill);
-    
-    // If skill doesn't exist yet, create it
-    if (!skill) {
-      skill = await sm.createSkill(parsed.skill, {
-        description: `Track ${parsed.skill}`,
-        triggers: SKILL_PARSERS[parsed.skill]?.triggers || [parsed.skill],
-        unit: parsed.unit || 'count',
-        dailyGoal: getDefaultGoal(parsed.skill)
-      });
-    }
-    
-    // Log the entry
-    const entry = await sm.addEntry(skill.id, parsed.entry);
-    const todayStats = await sm.getTodayStats(skill.id);
-    
-    return formatTrackingResponse(skill, entry, todayStats);
+  // Check if it's a greeting
+  if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b/i.test(lower)) {
+    return "Hey! 👋 I'm your habit tracker. Try:\n• \"drank 500ml water\"\n• \"did 20 pushups\"\n• \"how's my water today?\"\n\nType **help** for more options.";
   }
 
-  return parsed.suggestions?.length 
-    ? `🤔 ${parsed.suggestions.join('\n')}`
-    : null;
+  // Unknown intent
+  return "I'm not sure what you want to track. Try:\n• \"drank 500ml water\" (to log)\n• \"how's my water?\" (to check progress)\n• \"my skills\" (to see all trackers)\n\nType **help** for more examples.";
 }
 
-// Default goals for known skills
-const SKILL_PARSERS: Record<string, { triggers: string[], goal?: number }> = {
-  water: { triggers: ['water', 'drank', 'drink', 'hydrat'], goal: 2000 },
-  coffee: { triggers: ['coffee', 'espresso', 'cappuccino'], goal: 3 },
-  steps: { triggers: ['steps', 'walked'], goal: 10000 },
-  exercise: { triggers: ['exercise', 'workout', 'ran', 'run'], goal: 30 },
-  mood: { triggers: ['mood', 'feeling', 'feel'], goal: undefined },
-  sleep: { triggers: ['sleep', 'slept'], goal: 8 },
-};
+async function handleQuery(sm: any, parsed: any): Promise<string> {
+  if (!parsed.skillId) {
+    // General query - show summary of all skills
+    const skills = sm.getAllSkills();
+    if (skills.length === 0) {
+      return "You haven't tracked anything yet! Try saying \"drank 500ml water\" or \"did 20 pushups\".";
+    }
+    
+    const today = new Date().toISOString().split('T')[0];
+    const lines = [];
+    
+    for (const skill of skills) {
+      const todayStats = await sm.getTodayStats(skill.id);
+      const icon = skill.icon || '📊';
+      let line = `${icon} **${skill.name}**: ${todayStats.sum} ${skill.unit || ''}`;
+      
+      if (skill.dailyGoal) {
+        const pct = Math.round((todayStats.sum / skill.dailyGoal) * 100);
+        line += ` / ${skill.dailyGoal} (${pct}%)`;
+      }
+      
+      lines.push(line);
+    }
+    
+    return `📊 **Today's Progress:**\n\n${lines.join('\n')}`;
+  }
 
-function getDefaultGoal(skillId: string): number | undefined {
-  return SKILL_PARSERS[skillId]?.goal;
+  // Query specific skill
+  let skill = sm.skills.get(parsed.skillId);
+  
+  if (!skill) {
+    // Check if any skill matches
+    const allSkills = sm.getAllSkills();
+    skill = allSkills.find((s: any) => 
+      s.id === parsed.skillId || 
+      s.triggers?.includes(parsed.skillId) ||
+      s.name.toLowerCase() === parsed.skillId
+    );
+  }
+  
+  if (!skill) {
+    return `I don't have a tracker for "${parsed.skillId}" yet. Start tracking by saying something like "did 20 ${parsed.skillId}".`;
+  }
+
+  // Get stats based on period
+  const today = new Date().toISOString().split('T')[0];
+  const todayStats = await sm.getTodayStats(skill.id);
+  const allStats = await sm.getStats(skill.id);
+  
+  const icon = skill.icon || '📊';
+  let response = `${icon} **${skill.name}**\n\n`;
+  
+  // Today
+  response += `**Today:** ${todayStats.sum} ${skill.unit || ''}`;
+  if (skill.dailyGoal) {
+    const pct = Math.min(100, Math.round((todayStats.sum / skill.dailyGoal) * 100));
+    response += ` / ${skill.dailyGoal} (${pct}%)\n`;
+    response += generateProgressBar(pct) + '\n';
+    if (pct >= 100) response += '🎉 Goal reached!\n';
+  } else {
+    response += '\n';
+  }
+  
+  // Week summary
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const weekEntries = (await sm.getEntries(skill.id)).filter((e: any) => e.date >= weekAgo);
+  const weekSum = weekEntries.reduce((sum: number, e: any) => sum + (parseFloat(e.value) || 0), 0);
+  response += `**This week:** ${Math.round(weekSum * 10) / 10} ${skill.unit || ''}\n`;
+  
+  // Total
+  response += `**All time:** ${Math.round(allStats.sum * 10) / 10} ${skill.unit || ''} (${allStats.count} entries)`;
+  
+  return response;
 }
 
-function formatTrackingResponse(skill: any, entry: any, todayStats: any): string {
-  const value = entry.value || entry.distance || entry.steps || 1;
+async function handleLog(sm: any, parsed: any): Promise<string> {
+  const { skillId, skillDefaults, entry } = parsed;
+  
+  // Get or create skill
+  let skill = sm.skills.get(skillId);
+  
+  if (!skill) {
+    // Auto-create the skill
+    console.log(`[Chat] Auto-creating skill: ${skillId}`);
+    const defaults = skillDefaults || { unit: 'count', goal: null, icon: '📊' };
+    
+    skill = await sm.createSkill(skillId, {
+      description: `Track ${skillId}`,
+      triggers: [skillId],
+      unit: defaults.unit,
+      dailyGoal: defaults.goal,
+      icon: defaults.icon
+    });
+    
+    console.log(`[Chat] Created skill:`, skill.id);
+  }
+  
+  // Log the entry
+  const loggedEntry = await sm.addEntry(skill.id, entry);
+  const todayStats = await sm.getTodayStats(skill.id);
+  
+  // Build response
+  const icon = skill.icon || '📊';
+  const value = entry.value || 1;
   const unit = entry.unit || skill.unit || '';
   
-  let response = `${skill.icon} +${value}${unit} ${skill.name} logged!`;
+  let response = `${icon} **+${value}${unit ? ' ' + unit : ''}** ${skill.name} logged!\n\n`;
+  response += `Today: **${todayStats.sum}** ${skill.unit || ''}`;
   
-  // Add today's total
-  const todaySum = Math.round(todayStats.sum * 10) / 10;
-  response += `\n\nToday: ${todaySum} ${skill.unit || ''}`;
-  
-  // Add goal progress if available
   if (skill.dailyGoal) {
-    const pct = Math.min(100, Math.round((todaySum / skill.dailyGoal) * 100));
-    response += ` / ${skill.dailyGoal} (${pct}%)`;
-    response += `\n${generateProgressBar(pct)}`;
-    
-    if (pct >= 100) {
-      response += '\n🎉 Goal reached!';
-    }
+    const pct = Math.min(100, Math.round((todayStats.sum / skill.dailyGoal) * 100));
+    response += ` / ${skill.dailyGoal} (${pct}%)\n`;
+    response += generateProgressBar(pct);
+    if (pct >= 100) response += '\n🎉 Goal reached!';
   }
   
   return response;
 }
 
-function generateProgressBar(percent: number): string {
-  const filled = Math.round(percent / 10);
-  const empty = 10 - filled;
-  return '▓'.repeat(Math.min(10, filled)) + '░'.repeat(Math.max(0, empty));
+async function listSkills(sm: any): Promise<string> {
+  const skills = sm.getAllSkills();
+  
+  if (skills.length === 0) {
+    return "You don't have any skills yet! Start tracking by saying:\n• \"drank 500ml water\"\n• \"did 20 pushups\"\n• \"walked 5000 steps\"";
+  }
+  
+  const today = new Date().toISOString().split('T')[0];
+  const lines = [];
+  
+  for (const skill of skills) {
+    const todayStats = await sm.getTodayStats(skill.id);
+    const icon = skill.icon || '📊';
+    let line = `${icon} **${skill.name}** — ${todayStats.sum} ${skill.unit || ''} today`;
+    
+    if (skill.dailyGoal) {
+      const pct = Math.round((todayStats.sum / skill.dailyGoal) * 100);
+      line += ` (${pct}% of goal)`;
+    }
+    
+    lines.push(line);
+  }
+  
+  return `📋 **Your Skills:**\n\n${lines.join('\n')}`;
 }
 
-function generateResponse(message: string): string {
-  const lower = message.toLowerCase();
+function generateProgressBar(percent: number): string {
+  const filled = Math.round(Math.min(100, percent) / 10);
+  const empty = 10 - filled;
+  return '▓'.repeat(filled) + '░'.repeat(empty);
+}
 
-  if (lower.match(/^(hi|hello|hey)/)) {
-    return "Hey! I'm your personal tracker. Try saying things like:\n• \"drank 500ml water\"\n• \"walked 5000 steps\"\n• \"mood: great\"\n• \"did 20 pushups\"";
-  }
+function getHelpText(): string {
+  return `**🎯 Habit Tracker Help**
 
-  if (lower.includes('help')) {
-    return `**How to track:**
-• \"drank 500ml water\" or \"2 glasses of water\"
-• \"walked 3k steps\" or \"ran 5km\"
-• \"mood: good\" or \"feeling great\"
-• \"did 30 pushups\" or \"20 min workout\"
-• \"slept 7 hours\"
+**Logging:**
+• "drank 500ml water" or "2 glasses of water"
+• "did 20 pushups" or "30 squats"
+• "walked 5000 steps" or "ran 3km"
+• "slept 7 hours"
+• "mood: great" or "feeling good"
+
+**Checking progress:**
+• "how's my water?" or "how much water today?"
+• "how many pushups did I do?"
+• "show my steps"
 
 **Commands:**
-• \"my skills\" - list all your skills
-• \"how's my water\" - check today's progress
+• "my skills" — list all your trackers
+• "help" — show this help
 
-I'll auto-create new skills when you track something new!`;
-  }
-
-  return "I can help you track habits! Try saying something like \"drank 500ml water\" or type \"help\" for more options.";
+**Auto-create:** Just track something new and I'll create a skill for it!`;
 }
 
 export async function GET() {

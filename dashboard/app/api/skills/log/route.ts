@@ -37,56 +37,67 @@ export async function POST(request: NextRequest) {
     const parser = await getNlpParser();
     const sm = await getSkillManager();
     
-    const parsed = parser.parseWithSuggestions(text);
+    const parsed = parser.parseInput(text);
     
-    if (!parsed.success) {
-      return NextResponse.json({ 
-        success: false, 
-        message: parsed.message 
-      });
-    }
-
-    // Handle new skill creation
-    if (parsed.createNew && parsed.suggestedSkill) {
-      let skill = sm.skills.get(parsed.suggestedSkill);
-      
-      if (!skill) {
-        skill = await sm.createSkill(parsed.suggestedSkill, {
-          description: `Track ${parsed.suggestedSkill}`,
-          triggers: [parsed.suggestedSkill],
-          unit: 'count'
+    // Handle queries
+    if (parsed.intent === 'query') {
+      if (!parsed.skillId) {
+        return NextResponse.json({
+          success: true,
+          type: 'query',
+          message: 'What skill would you like to check?'
         });
       }
       
-      const entry = await sm.addEntry(skill.id, parsed.entry);
+      let skill = sm.skills.get(parsed.skillId);
+      if (!skill) {
+        return NextResponse.json({
+          success: false,
+          message: `No tracker found for "${parsed.skillId}". Start tracking first!`
+        });
+      }
+      
       const todayStats = await sm.getTodayStats(skill.id);
+      let message = `${skill.icon || '📊'} **${skill.name}** today: ${todayStats.sum} ${skill.unit || ''}`;
+      
+      if (skill.dailyGoal) {
+        const pct = Math.round((todayStats.sum / skill.dailyGoal) * 100);
+        message += ` / ${skill.dailyGoal} (${pct}%)`;
+      }
       
       return NextResponse.json({
         success: true,
-        created: true,
+        type: 'query',
         skill: skill.id,
-        entry,
         todaySum: todayStats.sum,
-        message: `✨ Created skill "${skill.name}" and logged ${entry.value}!`
+        goal: skill.dailyGoal,
+        message
       });
     }
 
-    // Handle known skill
-    if (parsed.skill) {
-      let skill = sm.skills.get(parsed.skill);
+    // Handle logging
+    if (parsed.intent === 'log' && parsed.skillId) {
+      let skill = sm.skills.get(parsed.skillId);
       
+      // Auto-create skill if needed
       if (!skill) {
-        skill = await sm.createSkill(parsed.skill, {
-          description: `Track ${parsed.skill}`,
-          triggers: [parsed.skill],
-          unit: parsed.unit || 'count'
+        const defaults = parsed.skillDefaults || { unit: 'count', goal: null, icon: '📊' };
+        skill = await sm.createSkill(parsed.skillId, {
+          description: `Track ${parsed.skillId}`,
+          triggers: [parsed.skillId],
+          unit: defaults.unit,
+          dailyGoal: defaults.goal,
+          icon: defaults.icon
         });
       }
       
       const entry = await sm.addEntry(skill.id, parsed.entry);
       const todayStats = await sm.getTodayStats(skill.id);
       
-      let message = `${skill.icon || '📊'} +${entry.value} ${skill.unit || ''} logged!`;
+      const value = parsed.entry.value || 1;
+      const unit = parsed.entry.unit || skill.unit || '';
+      
+      let message = `${skill.icon || '📊'} +${value}${unit ? ' ' + unit : ''} logged!`;
       message += ` Today: ${todayStats.sum}`;
       
       if (skill.dailyGoal) {
@@ -97,6 +108,7 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({
         success: true,
+        type: 'log',
         skill: skill.id,
         entry,
         todaySum: todayStats.sum,
@@ -107,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: false,
-      message: parsed.suggestions?.join('\n') || 'Could not parse input'
+      message: 'Could not understand that. Try "drank 500ml water" or "how\'s my water?"'
     });
 
   } catch (error: any) {
@@ -117,4 +129,11 @@ export async function POST(request: NextRequest) {
       error: error.message 
     }, { status: 500 });
   }
+}
+
+// Force reload skill manager
+export async function DELETE() {
+  skillManager = null;
+  nlpParser = null;
+  return NextResponse.json({ success: true, message: 'Cache cleared' });
 }
