@@ -1,0 +1,19 @@
+{
+  "skills": {
+    "water": {
+      "goal": {
+        "daily": 2000,
+        "unit": "ml",
+        "setAt": 1769884800000
+      }
+    },
+    "mood": {
+      "goal": {
+        "daily": 1,
+        "unit": "check-in",
+        "setAt": 1769884800000
+      }
+    }
+  },
+  "achievements": []
+}

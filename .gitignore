@@ -8,5 +8,6 @@ dist/
 *.sqlite
 *.sqlite-journal
 *.sqlite3
-# Skill data (user-specific)
+# Skill data (user-specific, but keep defaults)
 data/*.json
+!data/_goals.json
