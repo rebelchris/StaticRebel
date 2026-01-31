@@ -144,7 +144,7 @@ const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 const MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
 const VISION_MODEL = process.env.VISION_MODEL || 'llava';
-const MEMORY_FILE = path.join(os.homedir(), '.static-rebel', 'memory', 'daily');
+const MEMORY_FILE = path.join(os.homedir(), '.static-rebel', 'memory', 'memories.json');
 const PROFILE_FILE =
   process.env.PROFILE_FILE ||
   path.join(os.homedir(), '.static-rebel-profile.md');
@@ -281,7 +281,8 @@ async function buildProfile(rl) {
   const answers = {};
 
   for (const q of ONBOARDING_QUESTIONS) {
-    const question = q.prompt.replace(`{${q.key}}`, answers.name || q.default);
+    // Replace {name} placeholder with actual name if we have it
+    const question = q.prompt.replace('{name}', answers.name || 'friend');
     const answer = await new Promise((resolve) => {
       rl.question(`  ${question}: `, resolve);
     });
@@ -626,6 +627,12 @@ class MemoryStore {
   load() {
     try {
       if (fs.existsSync(this.filePath)) {
+        const stat = fs.statSync(this.filePath);
+        if (stat.isDirectory()) {
+          // Path is a directory, not a file - return empty memories
+          console.warn('Memory path is a directory, expected a file:', this.filePath);
+          return { memories: [] };
+        }
         const content = fs.readFileSync(this.filePath, 'utf-8');
         return JSON.parse(content);
       }
