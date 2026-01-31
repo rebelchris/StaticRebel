@@ -141,7 +141,7 @@ import {
 // ============================================================================
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
-const MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+const MODEL = getDefaultModel();
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
 const VISION_MODEL = process.env.VISION_MODEL || 'llava';
 const MEMORY_FILE = path.join(os.homedir(), '.static-rebel', 'memory', 'memories.json');
@@ -417,7 +417,7 @@ async function selectBestModel(taskType, availableModels) {
     }
   }
 
-  return availableModels[0] || 'llama3.2';
+  return availableModels[0] || getDefaultModel();
 }
 
 // ============================================================================
@@ -2393,7 +2393,7 @@ function showSmartSuggestions(suggestions) {
 async function detectAndExecuteActionIntents(llmResponse, userInput) {
   try {
     const trackStore = new TrackerStore();
-    const queryEngine = new QueryEngine();
+    const queryEngine = new QueryEngine(trackStore);
     const trackers = await trackStore.listTrackers();
 
     if (trackers.length === 0) {
@@ -2514,7 +2514,7 @@ Respond with ONLY valid JSON:
 async function routeNaturalLanguageQuery(userInput) {
   try {
     const trackStore = new TrackerStore();
-    const queryEngine = new QueryEngine();
+    const queryEngine = new QueryEngine(trackStore);
     const trackers = await trackStore.listTrackers();
 
     if (trackers.length === 0) {
@@ -4097,7 +4097,7 @@ async function chat() {
           // Tracker commands
           const trackStore = new TrackerStore();
           const visionAnalyzer = new VisionAnalyzer();
-          const queryEngine = new QueryEngine();
+          const queryEngine = new QueryEngine(trackStore);
           const personaChat = new PersonaChat(trackStore);
 
           const trackArgs = arg.split(' ');
@@ -4594,7 +4594,7 @@ Respond with JSON containing a "data" object with the extracted values.`;
       // Handle @tracker mentions (e.g., @matt how's my progress?)
       if (q.startsWith('@')) {
         const trackStore = new TrackerStore();
-        const queryEngine = new QueryEngine();
+        const queryEngine = new QueryEngine(trackStore);
         const personaChat = new PersonaChat(trackStore);
 
         // Extract tracker name and query
@@ -5048,7 +5048,7 @@ Respond with JSON containing a "data" object with the extracted values.`;
           // Add tracker context so AI knows about available trackers and recent data
           try {
             const trackStore = new TrackerStore();
-            const queryEngine = new QueryEngine();
+            const queryEngine = new QueryEngine(trackStore);
             const trackers = await trackStore.listTrackers();
 
             if (trackers.length > 0) {
@@ -5232,7 +5232,7 @@ Users can also explicitly interact with trackers using @trackerName (e.g., "@mat
             // Generate and show proactive insights after logging
             try {
               const trackStore = new TrackerStore();
-              const queryEngine = new QueryEngine();
+              const queryEngine = new QueryEngine(trackStore);
               const trackers = await trackStore.listTrackers();
               const insights = generateProactiveInsights(
                 trackers,

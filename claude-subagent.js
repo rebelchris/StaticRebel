@@ -11,9 +11,11 @@ import path from 'path';
 import os from 'os';
 import http from 'http';
 import { createBackend, autoDetectBackend } from './model-backend.js';
+import { loadConfig } from './lib/configManager.js';
 
+const config = loadConfig();
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3-coder';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || config?.models?.defaults?.general || 'ollama/qwen3-coder';
 const BACKEND_TYPE = process.env.BACKEND_TYPE || 'auto';
 
 /**

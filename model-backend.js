@@ -1,5 +1,6 @@
 import http from 'http';
 import https from 'https';
+import { getDefaultModel } from './lib/modelRegistry.js';
 
 // ============================================================================
 // Model Backend Abstraction
@@ -34,7 +35,7 @@ class OllamaBackend extends ModelBackend {
     super(options);
     this.host =
       options.host || process.env.OLLAMA_HOST || 'http://localhost:11434';
-    this.model = options.model || process.env.OLLAMA_MODEL || 'qwen3-coder';
+    this.model = options.model || getDefaultModel();
   }
 
   async chat(messages, options = {}) {

@@ -4,7 +4,7 @@ import { TrackerStore } from '@/tracker.js';
 export async function GET() {
   try {
     const store = new TrackerStore();
-    const trackers = store.listTrackers();
+    const trackers = await store.listTrackers();
 
     // Add id field for consistency
     const enrichedTrackers = trackers.map((tracker: any) => ({

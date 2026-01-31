@@ -14,8 +14,8 @@ const CONFIG_DIR = path.join(os.homedir(), '.static-rebel', 'config');
 const SOUL_FILE = path.join(CONFIG_DIR, 'SOUL.md');
 const PROFILE_FILE = path.join(os.homedir(), '.static-rebel-profile.md');
 
-// Get the model name from environment
-const CURRENT_MODEL = process.env.OLLAMA_MODEL || 'qwen3-coder';
+// Get the model name from environment or config
+const CURRENT_MODEL = getDefaultModel();
 
 // Base system prompt
 const BASE_SYSTEM_PROMPT = `You are Charlize—a sophisticated, elegant AI assistant with dry wit and grounded wisdom.

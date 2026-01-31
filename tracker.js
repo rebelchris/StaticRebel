@@ -2,9 +2,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import http from 'http';
 import os from 'os';
+import { getDefaultModel } from './lib/modelRegistry.js';
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
-const MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+const MODEL = getDefaultModel();
 const VISION_MODEL = process.env.VISION_MODEL || 'llava';
 const TRACKERS_DIR = path.join(os.homedir(), '.static-rebel', 'trackers');
 const TRACKERS_REGISTRY = path.join(TRACKERS_DIR, 'trackers.json');
@@ -304,6 +305,12 @@ export async function parseRecordFromText(text, trackerType) {
   const prompt = `Parse the following text into a structured record for a ${trackerType} tracker.
 
 Text: "${text}"
+
+IMPORTANT RULES:
+- Extract EXACT numbers from the text - do not guess or infer
+- If user says "10 pushups", extract count: 10 (NOT half, not 5, exactly 10)
+- If user says "add 50 calories", extract calories: 50
+- Use the exact number mentioned, do not halve, double, or modify it
 
 Respond with ONLY a JSON object containing the parsed fields. Example formats:
 - For nutrition: {"food": "chicken salad", "calories": 450, "meal": "lunch"}

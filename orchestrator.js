@@ -25,8 +25,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuration
+// Load config for model defaults
+let config = {};
+try {
+  const { loadConfig } = await import('./lib/configManager.js');
+  config = loadConfig();
+} catch (e) {
+  // Config not available, use defaults
+}
+
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3-coder';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || config?.models?.defaults?.general || 'ollama/qwen3-coder';
 const CLAUDE_CLI_PATH =
   process.env.CLAUDE_CLI_PATH || '/Users/charlizebongers/.local/bin/claude';
 

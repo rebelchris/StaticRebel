@@ -10,6 +10,35 @@ import {
   parseTrackerFromNaturalLanguage,
 } from '../../tracker.js';
 
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Clean up duplicate characters in text (e.g., "CCaann" -> "Can")
+ * Also removes character repetition patterns like "yyoouu" -> "you"
+ */
+function cleanDuplicateChars(text) {
+  return text
+    // Remove triple+ repeats like "CCCaann" -> "Can"
+    .replace(/(.)\1{2,}/g, '$1$1')
+    // Fix double letter patterns like "yyoouu" -> "you" (but preserve words like "good")
+    .replace(/\b(\w)\1(\w)\2\b/g, '$1$2')
+    // Handle specific common patterns
+    .replace(/\bii\b/g, 'I')
+    .replace(/\s+/g, ' ')  // Normalize spaces
+    .trim();
+}
+
+/**
+ * Validate that a response doesn't contain excessive character duplication
+ */
+function isResponseValid(text) {
+  // Check for obvious duplication patterns that indicate model glitch
+  const doubleCharRatio = (text.match(/(.)\1/g) || []).length / text.length;
+  return doubleCharRatio < 0.15; // Allow up to 15% double chars
+}
+
 export default {
   name: 'track',
   displayName: 'Tracking System',
@@ -531,11 +560,19 @@ function parseWorkoutHeuristic(text) {
   const lower = text.toLowerCase();
   const data = {};
 
-  // Handle "50 pushups" style inputs
+  // Handle "50 pushups" style inputs - FIRST PRIORITY before other patterns
   const pushupMatch = lower.match(/(\d+)\s*(pushups|push-ups|push ups)/i);
   if (pushupMatch) {
     data.exercise = 'pushups';
     data.count = parseInt(pushupMatch[1]);
+    return data;
+  }
+
+  // Handle "10 more pushups" - extract just the number before pushups
+  const morePushupsMatch = lower.match(/(\d+)\s*more\s*(pushups|push-ups|push ups)/i);
+  if (morePushupsMatch) {
+    data.exercise = 'pushups';
+    data.count = parseInt(morePushupsMatch[1]);
     return data;
   }
 
@@ -561,6 +598,16 @@ function parseWorkoutHeuristic(text) {
     data.exercise = 'pushups';
     data.count = parseInt(didPushupsMatch[1]);
     return data;
+  }
+
+  // Extract any standalone number as count (for workout logging)
+  // This catches things like "log 10 more" without explicit units
+  const standaloneNumber = lower.match(/(?:^|\s)(\d{1,4})(?:\s|$)/);
+  if (standaloneNumber && !data.count) {
+    // Only use if it's not part of a time duration
+    if (!/\d+\s*(minutes?|mins?|hours?|hrs?)/i.test(lower)) {
+      data.count = parseInt(standaloneNumber[1]);
+    }
   }
 
   const exerciseMatch = lower.match(
@@ -619,6 +666,34 @@ async function logToTracker(
       }
     }
 
+    // VALIDATE: Ensure extracted numbers match the input
+    // Extract all numbers from original input
+    const inputNumbers = input.match(/\d+/g)?.map(Number) || [];
+    if (inputNumbers.length > 0) {
+      const extractedValues = Object.values(parsed.data).filter(v => typeof v === 'number');
+      // Check if any extracted number is suspiciously different from input
+      for (const num of inputNumbers) {
+        // If input has "10" and we didn't extract 10, try to fix
+        if (!extractedValues.includes(num)) {
+          console.log(`[Tracker] LLM may have misparsed: found ${num} in input but not in parsed data`);
+          // Let heuristic parser have final say
+          if (tracker.type === 'workout') {
+            const heuristic = parseWorkoutHeuristic(input);
+            if (heuristic.count === num) {
+              parsed.data.count = num;
+              console.log(`[Tracker] Corrected using heuristic: count = ${num}`);
+            }
+          } else if (tracker.type === 'nutrition' || tracker.type === 'food') {
+            const heuristic = parseFoodHeuristic(input);
+            if (heuristic.calories === num) {
+              parsed.data.calories = num;
+              console.log(`[Tracker] Corrected using heuristic: calories = ${num}`);
+            }
+          }
+        }
+      }
+    }
+
     if (!parsed.success || Object.keys(parsed.data).length === 0) {
       console.error(`[Tracker] No data extracted from "${input}"`);
       return { success: false, message: null };
@@ -635,14 +710,19 @@ async function logToTracker(
     });
 
     if (result) {
+      // Format response with clear, unambiguous values
       const dataEntries = Object.entries(parsed.data)
         .filter(([k, v]) => v !== null && v !== undefined && v !== '')
         .map(([k, v]) => `${k}: ${v}`)
         .join(', ');
 
+      // Get timestamp for the entry
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // Return a response that clearly states what was logged
       return {
         success: true,
-        message: `Logged to **${tracker.displayName}**:\n${dataEntries}`,
+        message: `✓ Logged to **${tracker.displayName}** at ${timestamp}\n\n${dataEntries}`,
       };
     }
 
@@ -662,27 +742,44 @@ async function handleTrackQuery(input, tracker, store) {
     return `No entries logged yet for ${tracker.displayName}.`;
   }
 
-  // Get today's records
-  const data = store.getRecordsByDateRange(tracker.id, null, null);
-  const today = new Date().toISOString().split('T')[0];
-  const todayRecords = data.records.filter((r) => r.timestamp?.startsWith(today));
+  // Detect time period from user input
+  const lower = input.toLowerCase();
+  let timePeriod = 'today';
+  let startDate = null;
 
-  if (todayRecords.length === 0) {
-    return `No entries logged today for ${tracker.displayName}.`;
+  if (/this week|weekly|past week|last 7 days/i.test(lower)) {
+    timePeriod = 'week';
+    // Calculate start of week (Monday)
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    startDate = d.toISOString().split('T')[0];
+  } else if (/this month|monthly/i.test(lower)) {
+    timePeriod = 'month';
+    startDate = new Date().toISOString().slice(0, 8) + '01';
   }
 
-  const totalCals = todayRecords.reduce(
+  // Get records by the determined time period
+  const data = store.getRecordsByDateRange(tracker.id, startDate, null);
+  const periodRecords = data.records;
+
+  if (periodRecords.length === 0) {
+    return `No entries logged ${timePeriod === 'today' ? 'today' : 'this ' + timePeriod} for ${tracker.displayName}.`;
+  }
+
+  const totalCals = periodRecords.reduce(
     (sum, r) => sum + (r.data?.calories || 0),
     0,
   );
 
-  const validRecords = todayRecords.filter((r) => {
+  const validRecords = periodRecords.filter((r) => {
     const meal = r.data?.name || r.data?.meal || r.data?.exercise || '';
     return meal && meal.toLowerCase() !== 'no meal mentioned';
   });
 
   if (validRecords.length === 0) {
-    return `No valid entries logged today for ${tracker.displayName}.`;
+    return `No valid entries logged ${timePeriod === 'today' ? 'today' : 'this ' + timePeriod} for ${tracker.displayName}.`;
   }
 
   if (tracker.type === 'nutrition' || tracker.type === 'food') {
@@ -690,43 +787,52 @@ async function handleTrackQuery(input, tracker, store) {
       .map((r) => {
         const meal = r.data?.name || r.data?.meal || 'Entry';
         const cal = r.data?.calories ? ` (${r.data.calories} cal)` : '';
-        return `- ${meal}${cal}`;
+        const time = new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `- ${time}: ${meal}${cal}`;
       })
       .join('\n');
 
     return (
-      `**${tracker.displayName}** today:\n\n` +
+      `**${tracker.displayName}** ${timePeriod === 'today' ? 'today' : 'this ' + timePeriod}:\n\n` +
       entries +
       `\n\nTotal: ${validRecords.length} entries, ${totalCals.toFixed(0)} calories`
     );
   } else if (tracker.type === 'workout') {
     const entries = validRecords
-      .map((r) => {
+      .map((r, i) => {
         const exercise = r.data?.exercise || r.data?.name || 'Workout';
         const details = [];
-        if (r.data?.duration) details.push(`${r.data.duration}`);
-        if (r.data?.distance) details.push(`${r.data.distance}`);
+        if (r.data?.count) details.push(`${r.data.count} reps`);
+        if (r.data?.duration) details.push(`${r.data.duration} min`);
+        if (r.data?.distance) details.push(r.data.distance);
         if (r.data?.sets) details.push(`${r.data.sets} sets`);
-        const detailStr = details.length > 0 ? ` (${details.join(', ')})` : '';
-        return `- ${exercise}${detailStr}`;
+        // Format timestamp for the entry
+        const time = new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const detailStr = details.length > 0 ? ` - ${details.join(', ')}` : '';
+        return `- ${time}: ${exercise}${detailStr}`;
       })
       .join('\n');
 
     return (
-      `**${tracker.displayName}** today:\n\n` +
+      `**${tracker.displayName}** ${timePeriod === 'today' ? 'today' : 'this ' + timePeriod}:\n\n` +
       entries +
-      `\n\nTotal: ${validRecords.length} workouts`
+      `\n\nTotal: ${validRecords.length} workout entries`
     );
   } else {
+    // Generic tracker - show all fields for each entry
     const entries = validRecords
       .map((r, i) => {
-        const mainField = Object.entries(r.data)[0];
-        return `- Entry ${i + 1}: ${mainField ? `${mainField[0]}=${mainField[1]}` : 'No data'}`;
+        const time = new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const fields = Object.entries(r.data)
+          .filter(([k, v]) => v !== null && v !== undefined && v !== '')
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(', ');
+        return `- ${time}: ${fields || 'No data'}`;
       })
       .join('\n');
 
     return (
-      `**${tracker.displayName}** today:\n\n` +
+      `**${tracker.displayName}** ${timePeriod === 'today' ? 'today' : 'this ' + timePeriod}:\n\n` +
       entries +
       `\n\nTotal: ${validRecords.length} entries`
     );
