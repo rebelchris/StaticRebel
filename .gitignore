@@ -8,3 +8,5 @@ dist/
 *.sqlite
 *.sqlite-journal
 *.sqlite3
+# Skill data (user-specific)
+data/*.json
