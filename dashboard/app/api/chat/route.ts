@@ -66,7 +66,6 @@ export async function POST(request: NextRequest) {
       });
       responseText = result?.content || result?.response || String(result);
     } catch (e: any) {
-      // Fallback to simple response if chat handler fails
       console.error('Chat handler error, using fallback:', e?.message || e);
       responseText = generateFallbackResponse(sanitizedMessage, activePersona);
     }
