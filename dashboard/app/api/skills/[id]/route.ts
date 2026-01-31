@@ -1,66 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
-import fs from 'fs/promises';
+import os from 'os';
 
-// Detect project root
-async function getProjectRoot() {
-  const cwd = process.cwd();
-  
-  if (cwd.endsWith('/dashboard') || cwd.endsWith('\\dashboard')) {
-    return path.resolve(cwd, '..');
-  }
-  
-  try {
-    await fs.access(path.join(cwd, 'lib', 'skills', 'index.js'));
-    return cwd;
-  } catch {
-    try {
-      await fs.access(path.join(cwd, '..', 'lib', 'skills', 'index.js'));
-      return path.resolve(cwd, '..');
-    } catch {
-      throw new Error(`Cannot find skills lib. cwd=${cwd}`);
-    }
-  }
-}
+const STATIC_REBEL_DIR = path.join(os.homedir(), '.static-rebel');
 
 let skillManagerInstance: any = null;
-let goalTrackerInstance: any = null;
-let projectRoot: string | null = null;
-
-async function getRoot() {
-  if (!projectRoot) {
-    projectRoot = await getProjectRoot();
-  }
-  return projectRoot;
-}
 
 async function getSkillManager() {
   if (skillManagerInstance) return skillManagerInstance;
   
-  const root = await getRoot();
-  const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
-  
-  const mod = await import(skillsPath);
-  const sm = new mod.SkillManager({
-    skillsDir: path.join(root, 'skills'),
-    dataDir: path.join(root, 'data')
+  const SkillManagerModule = await import('../../../../../lib/skills/skill-manager.js');
+  const sm = new SkillManagerModule.SkillManager({
+    skillsDir: path.join(STATIC_REBEL_DIR, 'skills'),
+    dataDir: path.join(STATIC_REBEL_DIR, 'data')
   });
   await sm.init();
   skillManagerInstance = sm;
   return sm;
-}
-
-async function getGoalTracker() {
-  if (goalTrackerInstance) return goalTrackerInstance;
-  
-  const root = await getRoot();
-  const skillsPath = path.join(root, 'lib', 'skills', 'index.js');
-  
-  const mod = await import(skillsPath);
-  const tracker = new mod.GoalTracker(path.join(root, 'data'));
-  await tracker.init();
-  goalTrackerInstance = tracker;
-  return tracker;
 }
 
 export async function GET(
@@ -78,20 +34,19 @@ export async function GET(
     const skill = sm.skills.get(id);
     const entries = await sm.getEntries(id);
     const stats = await sm.getStats(id);
-    
-    const goals = await getGoalTracker();
-    const goal = goals.getGoal(id);
-    const streak = goals.calculateStreak(entries);
+    const todayStats = await sm.getTodayStats(id);
     
     return NextResponse.json({
       id,
       name: skill.name,
       description: skill.description,
+      icon: skill.icon,
+      unit: skill.unit,
+      dailyGoal: skill.dailyGoal,
       triggers: skill.triggers,
       entries,
       stats,
-      goal,
-      streak
+      todayStats
     });
   } catch (error: any) {
     console.error('Skill fetch error:', error);
@@ -107,44 +62,33 @@ export async function POST(
     const { id } = params;
     const data = await request.json();
     
-    // Clear cache to get fresh data
+    // Clear cache
     skillManagerInstance = null;
-    goalTrackerInstance = null;
-    
     const sm = await getSkillManager();
     
     if (!sm.skills.has(id)) {
       return NextResponse.json({ error: 'Skill not found' }, { status: 404 });
     }
     
+    const skill = sm.skills.get(id);
     const entry = await sm.addEntry(id, data);
+    const todayStats = await sm.getTodayStats(id);
     
-    const goals = await getGoalTracker();
-    const goal = goals.getGoal(id);
     let goalProgress = null;
-    
-    if (goal?.daily) {
-      const today = new Date().toISOString().split('T')[0];
-      const todayEntries = (await sm.getEntries(id)).filter((e: any) => e.date === today);
-      const total = todayEntries.reduce((sum: number, e: any) => 
-        sum + (parseFloat(e.value) || parseFloat(e.score) || 1), 0);
-      
+    if (skill.dailyGoal) {
       goalProgress = {
-        current: total,
-        target: goal.daily,
-        percent: Math.round((total / goal.daily) * 100),
-        met: total >= goal.daily
+        current: todayStats.sum,
+        target: skill.dailyGoal,
+        percent: Math.round((todayStats.sum / skill.dailyGoal) * 100),
+        met: todayStats.sum >= skill.dailyGoal
       };
     }
-    
-    const allEntries = await sm.getEntries(id);
-    const streak = goals.calculateStreak(allEntries);
     
     return NextResponse.json({ 
       success: true, 
       entry,
-      goalProgress,
-      streak
+      todaySum: todayStats.sum,
+      goalProgress
     });
   } catch (error: any) {
     console.error('Entry add error:', error);
@@ -156,5 +100,24 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  return NextResponse.json({ error: 'Delete not implemented' }, { status: 501 });
+  try {
+    const { id } = params;
+    const sm = await getSkillManager();
+    
+    // Delete the skill file
+    const fs = await import('fs/promises');
+    const skillPath = path.join(STATIC_REBEL_DIR, 'skills', `${id}.md`);
+    const dataPath = path.join(STATIC_REBEL_DIR, 'data', `${id}.json`);
+    
+    try { await fs.unlink(skillPath); } catch {}
+    try { await fs.unlink(dataPath); } catch {}
+    
+    // Clear cache
+    skillManagerInstance = null;
+    
+    return NextResponse.json({ success: true, deleted: id });
+  } catch (error: any) {
+    console.error('Skill delete error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
