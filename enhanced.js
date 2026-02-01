@@ -29,6 +29,7 @@ import { apiCommand } from './lib/api/cli.js';
 import { slackCommand } from './lib/integrations/slack.js';
 import { notionCommand } from './lib/integrations/notion-cli.js';
 import { webhookCommand } from './lib/integrations/webhooks-cli.js';
+import { integrationCommand } from './lib/integrations/dynamic/cli.js';
 import {
   initMemory,
   getMemoryStats,
@@ -3036,6 +3037,20 @@ async function main() {
         return;
       } catch (error) {
         console.error('Webhook error:', error.message);
+        return;
+      }
+    }
+    
+    // Check for integration commands
+    if (args[0] === 'integration' || args[0] === 'integrations') {
+      try {
+        const result = await integrationCommand(args.slice(1));
+        if (result) {
+          console.log(result);
+        }
+        return;
+      } catch (error) {
+        console.error('Integration error:', error.message);
         return;
       }
     }

@@ -1,0 +1,156 @@
+{
+  "id": "generic-rest-api",
+  "name": "Generic REST API",
+  "description": "Template for connecting to any REST API service",
+  "baseUrl": "https://api.example.com",
+  "authentication": {
+    "type": "api_key",
+    "header": "X-API-Key",
+    "envVar": "GENERIC_API_KEY"
+  },
+  "capabilities": [
+    "read data",
+    "create records",
+    "update information",
+    "delete items",
+    "query data"
+  ],
+  "responseFormat": "json",
+  "actions": [
+    {
+      "name": "get_data",
+      "description": "Retrieve data from the API",
+      "method": "GET",
+      "endpoint": "/data",
+      "parameters": {
+        "limit": {
+          "type": "number",
+          "required": false,
+          "description": "Number of items to return (default: 10)"
+        },
+        "offset": {
+          "type": "number",
+          "required": false,
+          "description": "Number of items to skip"
+        },
+        "filter": {
+          "type": "string",
+          "required": false,
+          "description": "Filter criteria"
+        },
+        "sort": {
+          "type": "string",
+          "required": false,
+          "description": "Sort order (e.g., 'name', '-created_at')"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Get the latest data"
+    },
+    {
+      "name": "create_item",
+      "description": "Create a new item",
+      "method": "POST",
+      "endpoint": "/items",
+      "parameters": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "description": "Item name"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "description": "Item description"
+        },
+        "category": {
+          "type": "string",
+          "required": false,
+          "description": "Item category"
+        },
+        "tags": {
+          "type": "array",
+          "required": false,
+          "description": "Item tags"
+        },
+        "metadata": {
+          "type": "object",
+          "required": false,
+          "description": "Additional metadata"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Create a new item called 'Test Item'"
+    },
+    {
+      "name": "update_item",
+      "description": "Update an existing item",
+      "method": "PUT",
+      "endpoint": "/items/{id}",
+      "parameters": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "description": "Item ID to update"
+        },
+        "name": {
+          "type": "string",
+          "required": false,
+          "description": "New item name"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "description": "New item description"
+        },
+        "category": {
+          "type": "string",
+          "required": false,
+          "description": "New item category"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Update item with ID 123"
+    },
+    {
+      "name": "delete_item",
+      "description": "Delete an item",
+      "method": "DELETE",
+      "endpoint": "/items/{id}",
+      "parameters": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "description": "Item ID to delete"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Delete item with ID 123"
+    },
+    {
+      "name": "search",
+      "description": "Search for items",
+      "method": "GET",
+      "endpoint": "/search",
+      "parameters": {
+        "q": {
+          "type": "string",
+          "required": true,
+          "description": "Search query"
+        },
+        "fields": {
+          "type": "string",
+          "required": false,
+          "description": "Fields to search in (comma-separated)"
+        },
+        "limit": {
+          "type": "number",
+          "required": false,
+          "description": "Number of results to return"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Search for items containing 'test'"
+    }
+  ]
+}
