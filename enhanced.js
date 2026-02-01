@@ -723,6 +723,62 @@ async function handleSkillsRequest() {
   );
 }
 
+// ---------- Social Handler ----------
+async function handleSocialRequest(input) {
+  const lower = input.toLowerCase();
+
+  // Quick water challenge
+  if (/water challenge/i.test(input) || (/challenge.*water/i.test(input))) {
+    const args = input.match(/(\d+)\s*day/i);
+    const duration = args ? parseInt(args[1]) : 7;
+    
+    try {
+      const result = await socialCommand(['challenge', 'water', 'You', duration.toString()]);
+      return result;
+    } catch (error) {
+      return `Couldn't create water challenge: ${error.message}`;
+    }
+  }
+
+  // Share streak
+  if (/share.*streak/i.test(input)) {
+    const anonymous = /anonymous/i.test(input);
+    try {
+      const result = await socialCommand(['share', 'streak', 'water', ...(anonymous ? ['--anonymous'] : [])]);
+      return result;
+    } catch (error) {
+      return `Couldn't share streak: ${error.message}`;
+    }
+  }
+
+  // Show leaderboard
+  if (/leaderboard|who.*winning/i.test(input)) {
+    try {
+      const result = await socialCommand(['status']);
+      return result;
+    } catch (error) {
+      return `Couldn't show social status: ${error.message}`;
+    }
+  }
+
+  // Join challenge
+  if (/join.*challenge/i.test(input)) {
+    return "To join a challenge, use: `sr social challenge join <shareCode>`\n" +
+           "Ask your friend for their share code!";
+  }
+
+  // Default social help
+  return "🤝 Social Features Available!\n\n" +
+         "• `sr social challenge water` - Create a water challenge\n" +
+         "• `sr social share streak water` - Share your water streak\n" +
+         "• `sr social status` - See your social activity\n" +
+         "• `sr social help` - Full social commands help\n\n" +
+         "Say things like:\n" +
+         "- \"Create a water challenge\"\n" +
+         "- \"Share my water streak\"\n" +
+         "- \"Show the leaderboard\"";
+}
+
 // ---------- Web Search ----------
 
 // ---------- Shell Command ----------
@@ -2212,7 +2268,7 @@ async function handleImport(importFile, options) {
     
     // Read import file
     const content = await fsPromises.readFile(importFile, 'utf-8');
-    const importData = JSON.parse(content);
+    const parsedData = JSON.parse(content);
     
     let progressUpdate = '';
     options.onProgress = (current, total, operation) => {
@@ -2221,7 +2277,7 @@ async function handleImport(importFile, options) {
     };
     
     const startTime = Date.now();
-    const results = await importData(importData, options);
+    const results = await importData(parsedData, options);
     
     // Clear progress line
     process.stdout.write(`\r${' '.repeat(progressUpdate.length)}\r`);
