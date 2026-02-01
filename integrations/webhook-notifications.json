@@ -1,0 +1,173 @@
+{
+  "id": "webhook-notifications",
+  "name": "Webhook Notifications",
+  "description": "Send data and notifications via webhooks to any service",
+  "authentication": {
+    "type": "none"
+  },
+  "capabilities": [
+    "send notifications",
+    "trigger webhooks",
+    "post data to external services",
+    "integrate with automation tools",
+    "send alerts"
+  ],
+  "responseFormat": "json",
+  "actions": [
+    {
+      "name": "send_webhook",
+      "description": "Send data to a webhook URL",
+      "method": "POST",
+      "endpoint": "", 
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "description": "Target webhook URL"
+        },
+        "payload": {
+          "type": "object",
+          "required": true,
+          "description": "Data to send in the request body"
+        },
+        "headers": {
+          "type": "object",
+          "required": false,
+          "description": "Custom headers to include"
+        },
+        "method": {
+          "type": "string",
+          "required": false,
+          "description": "HTTP method to use (POST, PUT, PATCH)"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Send test notification to webhook"
+    },
+    {
+      "name": "send_slack_webhook",
+      "description": "Send message to Slack via webhook",
+      "method": "POST",
+      "endpoint": "",
+      "parameters": {
+        "webhook_url": {
+          "type": "string",
+          "required": true,
+          "description": "Slack webhook URL"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "description": "Message text"
+        },
+        "username": {
+          "type": "string",
+          "required": false,
+          "description": "Bot username"
+        },
+        "channel": {
+          "type": "string",
+          "required": false,
+          "description": "Channel to post to (e.g., #general)"
+        },
+        "icon_emoji": {
+          "type": "string",
+          "required": false,
+          "description": "Emoji icon (e.g., :ghost:)"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Send test message to Slack"
+    },
+    {
+      "name": "send_discord_webhook",
+      "description": "Send message to Discord via webhook",
+      "method": "POST",
+      "endpoint": "",
+      "parameters": {
+        "webhook_url": {
+          "type": "string",
+          "required": true,
+          "description": "Discord webhook URL"
+        },
+        "content": {
+          "type": "string",
+          "required": false,
+          "description": "Message content"
+        },
+        "username": {
+          "type": "string",
+          "required": false,
+          "description": "Bot username"
+        },
+        "avatar_url": {
+          "type": "string",
+          "required": false,
+          "description": "Bot avatar URL"
+        },
+        "embeds": {
+          "type": "array",
+          "required": false,
+          "description": "Rich embed objects"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Send test message to Discord"
+    },
+    {
+      "name": "trigger_zapier",
+      "description": "Trigger a Zapier webhook automation",
+      "method": "POST",
+      "endpoint": "",
+      "parameters": {
+        "webhook_url": {
+          "type": "string",
+          "required": true,
+          "description": "Zapier webhook URL"
+        },
+        "data": {
+          "type": "object",
+          "required": true,
+          "description": "Data to send to Zapier"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Trigger Zapier automation with test data"
+    },
+    {
+      "name": "ifttt_trigger",
+      "description": "Trigger an IFTTT webhook",
+      "method": "POST",
+      "endpoint": "https://maker.ifttt.com/trigger/{event}/with/key/{key}",
+      "parameters": {
+        "event": {
+          "type": "string",
+          "required": true,
+          "description": "IFTTT event name"
+        },
+        "key": {
+          "type": "string",
+          "required": true,
+          "description": "IFTTT webhook key"
+        },
+        "value1": {
+          "type": "string",
+          "required": false,
+          "description": "First value to pass"
+        },
+        "value2": {
+          "type": "string",
+          "required": false,
+          "description": "Second value to pass"
+        },
+        "value3": {
+          "type": "string",
+          "required": false,
+          "description": "Third value to pass"
+        }
+      },
+      "responseFormat": "text",
+      "testRequest": "Trigger IFTTT event with test values"
+    }
+  ]
+}

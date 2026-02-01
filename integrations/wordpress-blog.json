@@ -1,0 +1,116 @@
+{
+  "id": "wordpress-blog",
+  "name": "WordPress Blog",
+  "description": "Create and manage WordPress blog posts via REST API",
+  "baseUrl": "https://yourblog.com/wp-json/wp/v2",
+  "authentication": {
+    "type": "basic",
+    "usernameEnvVar": "WP_USERNAME",
+    "passwordEnvVar": "WP_APP_PASSWORD"
+  },
+  "capabilities": [
+    "create blog posts",
+    "publish articles",
+    "manage content",
+    "schedule posts",
+    "update posts"
+  ],
+  "responseFormat": "json",
+  "actions": [
+    {
+      "name": "create_post",
+      "description": "Create a new blog post",
+      "method": "POST",
+      "endpoint": "/posts",
+      "parameters": {
+        "title": {
+          "type": "string",
+          "required": true,
+          "description": "Post title"
+        },
+        "content": {
+          "type": "string",
+          "required": true,
+          "description": "Post content (HTML)"
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "description": "Post status: draft, publish, private"
+        },
+        "excerpt": {
+          "type": "string",
+          "required": false,
+          "description": "Post excerpt"
+        },
+        "categories": {
+          "type": "array",
+          "required": false,
+          "description": "Category IDs"
+        },
+        "tags": {
+          "type": "array",
+          "required": false,
+          "description": "Tag IDs"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Create a test blog post with title 'Hello World'"
+    },
+    {
+      "name": "get_posts",
+      "description": "Get blog posts",
+      "method": "GET",
+      "endpoint": "/posts",
+      "parameters": {
+        "per_page": {
+          "type": "number",
+          "required": false,
+          "description": "Number of posts to return"
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "description": "Post status filter"
+        },
+        "search": {
+          "type": "string",
+          "required": false,
+          "description": "Search term"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Get my latest blog posts"
+    },
+    {
+      "name": "update_post",
+      "description": "Update an existing post",
+      "method": "PUT",
+      "endpoint": "/posts/{id}",
+      "parameters": {
+        "id": {
+          "type": "number",
+          "required": true,
+          "description": "Post ID to update"
+        },
+        "title": {
+          "type": "string",
+          "required": false,
+          "description": "New post title"
+        },
+        "content": {
+          "type": "string",
+          "required": false,
+          "description": "New post content"
+        },
+        "status": {
+          "type": "string",
+          "required": false,
+          "description": "New post status"
+        }
+      },
+      "responseFormat": "json",
+      "testRequest": "Update post with ID 123"
+    }
+  ]
+}
