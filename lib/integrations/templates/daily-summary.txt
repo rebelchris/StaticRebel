@@ -1,0 +1,24 @@
+📊 DAILY SUMMARY - {{date}}
+=====================================
+
+🎯 Today's Overview
+{{summary}}
+
+📈 Key Metrics
+• Goals Worked On: {{goalsWorked}}
+• Tasks Completed: {{tasksCompleted}}
+• Active Time: {{activeTime}}
+
+🔥 Current Streaks
+{{streaks}}
+
+{{#if milestoneReached}}
+🎉 NEW MILESTONE: {{milestoneReached}}
+{{/if}}
+
+💡 Tomorrow's Focus
+{{tomorrowFocus}}
+
+Keep up the excellent work! You're building great habits. 🚀
+
+StaticRebel • {{year}}

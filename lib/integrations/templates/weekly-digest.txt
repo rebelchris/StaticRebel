@@ -1,0 +1,32 @@
+📈 WEEKLY DIGEST - Week of {{date}}
+=====================================
+
+🎯 Week in Review
+{{weekSummary}}
+
+📊 Weekly Statistics
+• Goals Active: {{totalGoals}}
+• Tasks Done: {{completedTasks}}
+• Active Days: {{activeDays}}
+• Total Time: {{totalTime}}
+
+🏆 Goals Progress
+{{goalsProgress}}
+
+Overall Progress: {{overallProgress}}% complete
+
+🏅 Achievements This Week
+{{#if achievements}}
+{{#each achievements}}
+• {{this}}
+{{/each}}
+{{else}}
+Keep working towards your first achievement this week! 💪
+{{/if}}
+
+🔮 Next Week's Focus
+{{nextWeekFocus}}
+
+Another productive week in the books! Keep the momentum going. 🌟
+
+StaticRebel • {{year}}

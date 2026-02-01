@@ -1,0 +1,20 @@
+{
+  "botToken": "xoxb-your-bot-token-here",
+  "appToken": "xapp-your-app-token-here", 
+  "signingSecret": "your-signing-secret-here",
+  "webhookUrl": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+  "defaultChannel": "general",
+  "reminderChannel": "general",
+  "enabledCommands": ["/log", "/stats", "/remind"],
+  "autoLogDetection": true,
+  "dailySummaryTime": "09:00",
+  "dailySummaryChannel": "general",
+  "nudgeEnabled": true,
+  "features": {
+    "slashCommands": true,
+    "messageLogging": true,
+    "dailySummaries": true,
+    "webhooks": true,
+    "reminders": true
+  }
+}

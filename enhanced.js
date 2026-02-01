@@ -24,6 +24,9 @@ import { loadConfig } from './lib/configManager.js';
 import { marketplaceCommand } from './lib/marketplace/cli.js';
 import { socialCommand } from './lib/social/cli.js';
 import { handlePersonalityCommand } from './lib/personality/cli.js';
+import { apiCommand } from './lib/api/cli.js';
+import { slackCommand } from './lib/integrations/slack.js';
+import { notionCommand } from './lib/integrations/notion-cli.js';
 import {
   initMemory,
   getMemoryStats,
@@ -89,6 +92,17 @@ import {
   EXPORT_SCOPES,
   EXPORT_FORMATS
 } from './lib/export/index.js';
+import {
+  generateDailyReport,
+  generateWeeklyReport,
+  generateMonthlyReport,
+  generateYearlyReport,
+  formatReportAsTerminal,
+  formatReportAsMarkdown,
+  formatReportAsHTML,
+  saveReportToFile,
+  scheduleAutomaticReports
+} from './lib/analytics/index.js';
 
 // Level 2 AI Assistant - New Imports
 import {
@@ -2737,6 +2751,20 @@ async function main() {
       }
     }
     
+    // Check for slack commands
+    if (args[0] === 'slack') {
+      try {
+        const result = await slackCommand(args.slice(1));
+        if (result) {
+          console.log(result);
+        }
+        return;
+      } catch (error) {
+        console.error('Slack error:', error.message);
+        return;
+      }
+    }
+    
     if (exportCommands.includes(args[0])) {
       try {
         const result = await handleExportCommand(args);
@@ -2756,6 +2784,30 @@ async function main() {
         return;
       } catch (error) {
         console.error('Personality error:', error.message);
+        return;
+      }
+    }
+    
+    // Check for API command
+    if (args[0] === 'api') {
+      try {
+        const result = await apiCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('API error:', error.message);
+        return;
+      }
+    }
+    
+    // Check for report command
+    if (args[0] === 'report') {
+      try {
+        const result = await handleReportCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Report error:', error.message);
         return;
       }
     }

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Digest - {{date}}</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f8f9fa; }
+        .container { max-width: 600px; margin: 0 auto; background: white; }
+        .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 30px 20px; text-align: center; }
+        .content { padding: 30px 20px; }
+        .section { margin-bottom: 25px; }
+        .section h3 { color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 5px; }
+        .week-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0; }
+        .stat-card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border: 2px solid #e9ecef; }
+        .stat-value { font-size: 2em; font-weight: bold; color: #27ae60; display: block; }
+        .stat-label { font-size: 0.9em; color: #666; margin-top: 5px; }
+        .progress-bar { background: #e9ecef; border-radius: 10px; height: 8px; margin: 10px 0; overflow: hidden; }
+        .progress-fill { background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; border-radius: 10px; transition: width 0.3s ease; }
+        .achievement { background: linear-gradient(45deg, #f39c12, #e67e22); color: white; padding: 10px 15px; border-radius: 20px; margin: 5px; display: inline-block; font-weight: bold; }
+        .footer { background: #34495e; color: #bdc3c7; padding: 20px; text-align: center; font-size: 14px; }
+        .highlight { background: #e8f5e8; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📈 Weekly Digest</h1>
+            <p style="margin: 0; opacity: 0.9;">Week of {{date}}</p>
+        </div>
+        
+        <div class="content">
+            <div class="section">
+                <h3>🎯 Week in Review</h3>
+                <div class="highlight">
+                    <p>{{weekSummary}}</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>📊 Weekly Statistics</h3>
+                <div class="week-stats">
+                    <div class="stat-card">
+                        <span class="stat-value">{{totalGoals}}</span>
+                        <div class="stat-label">Goals Active</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value">{{completedTasks}}</span>
+                        <div class="stat-label">Tasks Done</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value">{{activeDays}}</span>
+                        <div class="stat-label">Active Days</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value">{{totalTime}}</span>
+                        <div class="stat-label">Total Time</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>🏆 Goals Progress</h3>
+                {{goalsProgress}}
+                
+                <div style="margin-top: 20px;">
+                    <h4>Overall Progress</h4>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{overallProgress}}%;"></div>
+                    </div>
+                    <small>{{overallProgress}}% complete</small>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>🏅 Achievements This Week</h3>
+                {{#if achievements}}
+                    {{#each achievements}}
+                    <span class="achievement">{{this}}</span>
+                    {{/each}}
+                {{else}}
+                    <p>Keep working towards your first achievement this week! 💪</p>
+                {{/if}}
+            </div>
+
+            <div class="section">
+                <h3>🔮 Next Week's Focus</h3>
+                <div class="highlight">
+                    <p>{{nextWeekFocus}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Another productive week in the books! Keep the momentum going. 🌟</p>
+            <p>StaticRebel • {{year}}</p>
+        </div>
+    </div>
+</body>
+</html>
