@@ -9,6 +9,7 @@ import { loadConfig, getConfig, resolvePath } from '../../lib/configManager.js';
 import { loadSessionMemory, writeDailyMemory, initMemory, readLongTermMemory } from '../../lib/memoryManager.js';
 import { loadModelRegistry, getModelForTask, detectTaskType, chatCompletion, listAvailableModels, parseModelRef, getDefaultModel } from '../../lib/modelRegistry.js';
 import { createSubagent, sendToSubagent, createCodingSubagent, createAnalysisSubagent } from '../../lib/subagentManager.js';
+import { getPersonalitySystemPrompt } from '../../lib/personality/index.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.static-rebel', 'config');
 const SOUL_FILE = path.join(CONFIG_DIR, 'SOUL.md');
@@ -80,6 +81,9 @@ export async function loadUserProfile() {
 // Build full system prompt
 export async function buildSystemPrompt() {
   let prompt = PERSONA_PROMPT || BASE_SYSTEM_PROMPT;
+
+  // Apply personality enhancements
+  prompt = getPersonalitySystemPrompt(prompt);
 
   // Load user profile
   const profile = await loadUserProfile();

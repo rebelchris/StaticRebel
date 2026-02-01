@@ -11,19 +11,14 @@
 
 import 'dotenv/config';
 import fs from 'fs';
-import { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
 import readline from 'readline';
 import http from 'http';
 import https from 'https';
 import { spawn } from 'child_process';
-import chalk from 'chalk';
-import ora from 'ora';
 import { loadConfig } from './lib/configManager.js';
 import { marketplaceCommand } from './lib/marketplace/cli.js';
-import { socialCommand } from './lib/social/cli.js';
-import { handlePersonalityCommand } from './lib/personality/cli.js';
 import {
   initMemory,
   getMemoryStats,
@@ -81,14 +76,6 @@ import {
   matchesAutoDetect,
   parseTrackerFromNaturalLanguage,
 } from './tracker.js';
-import {
-  exportData,
-  importData,
-  deleteAllUserData,
-  getExportStats,
-  EXPORT_SCOPES,
-  EXPORT_FORMATS
-} from './lib/export/index.js';
 
 // Level 2 AI Assistant - New Imports
 import {
@@ -312,25 +299,6 @@ const INTENT_PATTERNS = {
     // General activity patterns
     /today.*(run|walk|swim|bike|workout|jog|ride)/i,
     /(run|walk|swim|bike|workout|jog|ride).*today/i,
-  ],
-
-  // Social & Sharing
-  social: [
-    /share (my )?(streak|achievement|progress|goal)/i,
-    /create (a )?challenge/i,
-    /challenge.*water/i,
-    /water challenge/i,
-    /join (a )?challenge/i,
-    /show (the )?leaderboard/i,
-    /(who|what)'s winning/i,
-    /share with.*friend/i,
-    /share.*@\w+/i,
-    /challenge.*@\w+/i,
-    /my (social )?status/i,
-    /export.*challenge/i,
-    /import.*challenge/i,
-    /privacy settings/i,
-    /anonymous sharing/i,
   ],
 
   // Level 2: Persona & Identity
@@ -1474,73 +1442,72 @@ function showBanner() {
 }
 
 // ============================================================================
-// Colors & Styling (Enhanced with Chalk)
+// Colors & Styling
 // ============================================================================
 
-// Enhanced styled output functions using chalk
+const colors = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  italic: '\x1b[3m',
+  underline: '\x1b[4m',
+
+  // Foreground colors
+  black: '\x1b[30m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+
+  // Bright colors
+  brightBlack: '\x1b[90m',
+  brightRed: '\x1b[91m',
+  brightGreen: '\x1b[92m',
+  brightYellow: '\x1b[93m',
+  brightBlue: '\x1b[94m',
+  brightMagenta: '\x1b[95m',
+  brightCyan: '\x1b[96m',
+  brightWhite: '\x1b[97m',
+
+  // Background colors
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
+  bgYellow: '\x1b[43m',
+  bgBlue: '\x1b[44m',
+  bgMagenta: '\x1b[45m',
+  bgCyan: '\x1b[46m',
+};
+
+function colorize(text, color) {
+  return color ? `${color}${text}${colors.reset}` : text;
+}
+
+// Styled output functions
 const styles = {
-  user: (text) => chalk.cyanBright(text),
-  assistant: (text) => chalk.greenBright(text),
-  error: (text) => chalk.redBright(text),
-  warning: (text) => chalk.yellowBright(text),
-  info: (text) => chalk.blueBright(text),
-  dim: (text) => chalk.gray(text),
-  heading: (text) => chalk.whiteBright.bold(text),
-  command: (text) => chalk.magentaBright(text),
-  success: (text) => chalk.greenBright(text),
-  spinner: (text) => chalk.cyan(text),
-  stats: (text) => chalk.blue(text),
-  export: (text) => chalk.green(text),
-  bold: (text) => chalk.bold(text),
-  underline: (text) => chalk.underline(text),
+  user: (text) => colorize(text, colors.brightCyan),
+  assistant: (text) => colorize(text, colors.brightGreen),
+  error: (text) => colorize(text, colors.brightRed),
+  warning: (text) => colorize(text, colors.brightYellow),
+  info: (text) => colorize(text, colors.brightBlue),
+  dim: (text) => colorize(text, colors.dim),
+  heading: (text) => colorize(colorize(text, colors.bold), colors.brightWhite),
+  command: (text) => colorize(text, colors.brightMagenta),
+  success: (text) => colorize(text, colors.brightGreen),
 };
 
 function timestamp() {
   const now = new Date();
-  return styles.dim(now.toLocaleTimeString('en-US', { hour12: false }));
+  return colorize(
+    now.toLocaleTimeString('en-US', { hour12: false }),
+    colors.dim
+  );
 }
 
 function promptSymbol() {
-  return chalk.yellowBright('>');
-}
-
-// Global spinner instance for loading operations
-let globalSpinner = null;
-
-function startSpinner(text, color = 'cyan') {
-  if (globalSpinner) {
-    globalSpinner.stop();
-  }
-  globalSpinner = ora({
-    text: chalk[color](text),
-    spinner: 'dots',
-    color: color,
-  }).start();
-  return globalSpinner;
-}
-
-function updateSpinner(text, color = 'cyan') {
-  if (globalSpinner) {
-    globalSpinner.text = chalk[color](text);
-  }
-}
-
-function stopSpinner(text, symbol = '✓', color = 'green') {
-  if (globalSpinner) {
-    if (text) {
-      globalSpinner.succeed(chalk[color](text));
-    } else {
-      globalSpinner.stop();
-    }
-    globalSpinner = null;
-  }
-}
-
-function failSpinner(text, symbol = '✗', color = 'red') {
-  if (globalSpinner) {
-    globalSpinner.fail(chalk[color](text || 'Operation failed'));
-    globalSpinner = null;
-  }
+  return colorize('>', colors.brightYellow);
 }
 
 // ============================================================================
@@ -1751,15 +1718,13 @@ const CLI_COMMANDS = {
         `${styles.command('/help')}     ${styles.dim('Show this help message')}\n` +
         `${styles.command('/clear')}    ${styles.dim('Clear the screen')}\n` +
         `${styles.command('/history')}  ${styles.dim('Show conversation stats')}\n` +
-        `${styles.command('/stats')}    ${styles.dim('Show usage statistics')}\n` +
-        `${styles.command('/export')}   ${styles.dim('Backup your data')}\n` +
         `${styles.command('/models')}   ${styles.dim('List available models')}\n` +
         `${styles.command('/status')}   ${styles.dim('Show system status')}\n` +
         `${styles.command('/tasks')}    ${styles.dim('Show scheduled tasks')}\n` +
         `${styles.command('/skills')}   ${styles.dim('List available skills')}\n` +
         `${styles.command('/mem')}      ${styles.dim('Show memory stats')}\n` +
         `${styles.command('/quit')}     ${styles.dim('Exit the assistant')}\n` +
-        `${styles.dim('─'.repeat(35))}\n` +
+        `${styles.dim('─'.repeat(32))}\n` +
         `${styles.dim('Tip: Multi-line input:')}\n` +
         `${styles.dim('  Type your message and press ')}${styles.command('Enter')}\n` +
         `${styles.dim('  for a new line. Send with an ')}${styles.command('empty line')}${styles.dim('.')}`
@@ -1901,556 +1866,7 @@ const CLI_COMMANDS = {
       );
     },
   },
-
-  '/stats': {
-    description: 'Show comprehensive usage statistics',
-    execute: async () => {
-      const spinner = startSpinner('Gathering stats...', 'cyan');
-      
-      try {
-        const { getMemoryStats } = await import('./lib/memoryManager.js');
-        const { getSkillsStats } = await import('./lib/skillsManager.js');
-        const { getSubagentStats } = await import('./lib/subagentManager.js');
-        const { getWorkerStats } = await import('./lib/workerManager.js');
-        
-        // Session stats
-        const duration = Math.floor((new Date() - sessionStart) / 1000);
-        const mins = Math.floor(duration / 60);
-        const secs = duration % 60;
-        
-        // Memory stats
-        const memStats = getMemoryStats();
-        
-        // Skills stats
-        const skillsStats = getSkillsStats();
-        
-        // Subagent stats
-        const subagentStats = getSubagentStats();
-        
-        // Worker stats (if available)
-        let workerStats = { active: 0, completed: 0, failed: 0 };
-        try {
-          workerStats = getWorkerStats();
-        } catch (e) {
-          // Worker system not initialized
-        }
-
-        // Calculate streaks (simple implementation)
-        const today = new Date().toISOString().split('T')[0];
-        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-        const todayFile = path.join(os.homedir(), '.static-rebel', 'memory', `${today}.md`);
-        const yesterdayFile = path.join(os.homedir(), '.static-rebel', 'memory', `${yesterday}.md`);
-        
-        let streak = 0;
-        if (fs.existsSync(todayFile)) streak++;
-        if (fs.existsSync(yesterdayFile)) streak++;
-        
-        stopSpinner('Stats gathered!');
-        
-        return (
-          `${styles.heading('╔═══ StaticRebel Usage Statistics ═══╗')}\n` +
-          `${styles.stats('Session Stats:')}\n` +
-          `  ${styles.info('Messages this session:')} ${messageCount}\n` +
-          `  ${styles.info('Session duration:')} ${mins}m ${secs}s\n` +
-          `  ${styles.info('Started at:')} ${sessionStart.toLocaleString()}\n` +
-          `\n${styles.stats('Memory & Storage:')}\n` +
-          `  ${styles.info('Daily memory files:')} ${memStats.dailyFiles}\n` +
-          `  ${styles.info('Oldest memory:')} ${memStats.oldestMemory || 'None'}\n` +
-          `  ${styles.info('Storage used:')} ${((memStats.dailySize + memStats.longTermSize) / 1024).toFixed(1)} KB\n` +
-          `  ${styles.info('Activity streak:')} ${streak} day(s)\n` +
-          `\n${styles.stats('Skills & Capabilities:')}\n` +
-          `  ${styles.info('Available skills:')} ${skillsStats.total}\n` +
-          `  ${styles.info('Skills used:')} ${skillsStats.used || 0}\n` +
-          `  ${styles.info('Active subagents:')} ${subagentStats.active}\n` +
-          `  ${styles.info('Worker tasks:')} ${workerStats.active} active, ${workerStats.completed} completed\n` +
-          `\n${styles.success('💡 Tip:')} ${styles.dim('Use /export to backup your data')}`
-        );
-      } catch (error) {
-        failSpinner('Failed to gather stats');
-        return styles.error(`Error gathering stats: ${error.message}`);
-      }
-    },
-  },
-
-  '/export': {
-    description: 'Export/backup data',
-    execute: async () => {
-      const spinner = startSpinner('Preparing export...', 'green');
-      
-      try {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-        const exportDir = path.join(os.homedir(), '.static-rebel', 'exports');
-        const exportFile = path.join(exportDir, `staticrebel-backup-${timestamp}.tar.gz`);
-        
-        // Create exports directory if it doesn't exist
-        if (!fs.existsSync(exportDir)) {
-          fs.mkdirSync(exportDir, { recursive: true });
-        }
-        
-        updateSpinner('Creating backup archive...', 'green');
-        
-        // Simple backup - copy important directories
-        const dataDir = path.join(os.homedir(), '.static-rebel');
-        const memoryDir = path.join(dataDir, 'memory');
-        const configDir = path.join(dataDir, 'config');
-        
-        // Create a simple backup by copying files
-        const backupData = {
-          timestamp: new Date().toISOString(),
-          version: '2.0.0',
-          memory: {},
-          config: {},
-          stats: {
-            files: 0,
-            size: 0
-          }
-        };
-        
-        // Backup memory files
-        if (fs.existsSync(memoryDir)) {
-          const memoryFiles = fs.readdirSync(memoryDir);
-          for (const file of memoryFiles) {
-            if (file.endsWith('.md')) {
-              const filePath = path.join(memoryDir, file);
-              const content = fs.readFileSync(filePath, 'utf8');
-              backupData.memory[file] = content;
-              backupData.stats.files++;
-              backupData.stats.size += content.length;
-            }
-          }
-        }
-        
-        // Backup config files
-        if (fs.existsSync(configDir)) {
-          const configFiles = fs.readdirSync(configDir);
-          for (const file of configFiles) {
-            const filePath = path.join(configDir, file);
-            if (fs.statSync(filePath).isFile()) {
-              const content = fs.readFileSync(filePath, 'utf8');
-              backupData.config[file] = content;
-              backupData.stats.files++;
-              backupData.stats.size += content.length;
-            }
-          }
-        }
-        
-        // Write backup file
-        const backupJson = path.join(exportDir, `staticrebel-backup-${timestamp}.json`);
-        fs.writeFileSync(backupJson, JSON.stringify(backupData, null, 2));
-        
-        stopSpinner('Export completed!');
-        
-        return (
-          `${styles.heading('╔═══ Data Export Complete ═══╗')}\n` +
-          `${styles.export('Backup created:')}\n` +
-          `  ${styles.info('Location:')} ${backupJson}\n` +
-          `  ${styles.info('Files backed up:')} ${backupData.stats.files}\n` +
-          `  ${styles.info('Total size:')} ${(backupData.stats.size / 1024).toFixed(1)} KB\n` +
-          `  ${styles.info('Timestamp:')} ${backupData.timestamp}\n` +
-          `\n${styles.success('✅ Your data is safely backed up!')}\n` +
-          `${styles.dim('Backup includes: memory files, config, and metadata')}`
-        );
-        
-      } catch (error) {
-        failSpinner('Export failed');
-        return styles.error(`Export failed: ${error.message}`);
-      }
-    },
-  },
 };
-
-// Export command handler
-async function handleExportCommand(args) {
-  const command = args[0];
-  const options = {};
-  
-  // Parse command line arguments
-  for (let i = 1; i < args.length; i++) {
-    const arg = args[i];
-    
-    if (arg === '--format' || arg === '-f') {
-      options.format = args[i + 1];
-      i++; // Skip next arg
-    } else if (arg === '--scope' || arg === '-s') {
-      if (!options.scopes) options.scopes = [];
-      options.scopes.push(args[i + 1]);
-      i++; // Skip next arg
-    } else if (arg === '--output' || arg === '-o') {
-      options.outputPath = args[i + 1];
-      i++; // Skip next arg
-    } else if (arg === '--start-date') {
-      options.startDate = args[i + 1];
-      i++; // Skip next arg
-    } else if (arg === '--end-date') {
-      options.endDate = args[i + 1];
-      i++; // Skip next arg
-    } else if (arg === '--skills') {
-      if (!options.skills) options.skills = [];
-      options.skills.push(args[i + 1]);
-      i++; // Skip next arg
-    } else if (arg === '--csv') {
-      options.format = EXPORT_FORMATS.CSV;
-    } else if (arg === '--json') {
-      options.format = EXPORT_FORMATS.JSON;
-    } else if (arg === '--dry-run') {
-      options.dryRun = true;
-    } else if (arg === '--force') {
-      options.force = true;
-    } else if (arg === '--help' || arg === '-h') {
-      return showExportHelp(command);
-    }
-  }
-
-  // Set defaults
-  if (!options.format) options.format = EXPORT_FORMATS.JSON;
-  if (!options.scopes) options.scopes = [EXPORT_SCOPES.ALL];
-
-  switch (command) {
-    case 'export':
-      return await handleExport(options);
-    case 'import':
-      if (args.length < 2) {
-        return 'Error: Import file path required. Usage: sr import <file>';
-      }
-      const importFile = args[1];
-      return await handleImport(importFile, options);
-    case 'delete-all-data':
-      return await handleDeleteAllData(options);
-    default:
-      return 'Unknown export command';
-  }
-}
-
-async function handleExport(options) {
-  console.log('Starting data export...');
-  
-  const startTime = Date.now();
-  let progressUpdate = '';
-  
-  options.onProgress = (current, total, operation) => {
-    const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-    progressUpdate = `${operation} (${current}/${total}) ${percent}%`;
-    process.stdout.write(`\r${progressUpdate}`);
-  };
-
-  try {
-    const exportedData = await exportData(options);
-    
-    // Clear progress line
-    process.stdout.write(`\r${' '.repeat(progressUpdate.length)}\r`);
-    
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-    const outputPath = options.outputPath || 
-                      path.join(os.homedir(), '.static-rebel', 'exports', `export-${timestamp}`);
-    
-    // Ensure exports directory exists
-    const exportsDir = path.dirname(outputPath);
-    await fsPromises.mkdir(exportsDir, { recursive: true });
-    
-    if (options.format === EXPORT_FORMATS.CSV) {
-      // Create multiple CSV files
-      const createdFiles = [];
-      for (const [dataType, csvContent] of Object.entries(exportedData)) {
-        if (dataType !== 'metadata' && csvContent) {
-          const csvFile = `${outputPath}-${dataType}.csv`;
-          await fsPromises.writeFile(csvFile, csvContent);
-          createdFiles.push(csvFile);
-        }
-      }
-      
-      const duration = Date.now() - startTime;
-      const stats = await getExportStats();
-      
-      return (
-        `Export completed in ${duration}ms!\n\n` +
-        `Files created:\n${createdFiles.map(f => `  - ${f}`).join('\n')}\n\n` +
-        `Export summary:\n` +
-        `  Skills: ${stats.skills}\n` +
-        `  Trackers: ${stats.trackers}\n` +
-        `  Memory files: ${stats.memoryFiles}\n` +
-        `  Checkpoint sessions: ${stats.checkpointSessions}\n` +
-        `  Database tables: ${stats.databaseTables}`
-      );
-    } else {
-      // Create single JSON file
-      const jsonFile = `${outputPath}.json`;
-      await fsPromises.writeFile(jsonFile, JSON.stringify(exportedData, null, 2));
-      
-      const duration = Date.now() - startTime;
-      const stats = await getExportStats();
-      const fileSize = (await fsPromises.stat(jsonFile)).size;
-      
-      return (
-        `Export completed in ${duration}ms!\n\n` +
-        `File created: ${jsonFile}\n` +
-        `Size: ${(fileSize / 1024).toFixed(1)} KB\n\n` +
-        `Export summary:\n` +
-        `  Skills: ${stats.skills}\n` +
-        `  Trackers: ${stats.trackers}\n` +
-        `  Memory files: ${stats.memoryFiles}\n` +
-        `  Checkpoint sessions: ${stats.checkpointSessions}\n` +
-        `  Database tables: ${stats.databaseTables}\n\n` +
-        `Scopes: ${options.scopes.join(', ')}`
-      );
-    }
-  } catch (error) {
-    process.stdout.write(`\r${' '.repeat(progressUpdate.length)}\r`);
-    throw error;
-  }
-}
-
-async function handleImport(importFile, options) {
-  console.log(`Importing data from: ${importFile}`);
-  
-  try {
-    // Check if file exists
-    try {
-      await fsPromises.access(importFile);
-    } catch {
-      return `Error: Import file not found: ${importFile}`;
-    }
-    
-    // Read import file
-    const content = await fsPromises.readFile(importFile, 'utf-8');
-    const importData = JSON.parse(content);
-    
-    let progressUpdate = '';
-    options.onProgress = (current, total, operation) => {
-      progressUpdate = `${operation} (${current}/${total})`;
-      process.stdout.write(`\r${progressUpdate}`);
-    };
-    
-    const startTime = Date.now();
-    const results = await importData(importData, options);
-    
-    // Clear progress line
-    process.stdout.write(`\r${' '.repeat(progressUpdate.length)}\r`);
-    
-    const duration = Date.now() - startTime;
-    
-    let output = `Import completed in ${duration}ms!\n\n`;
-    output += `Results:\n`;
-    output += `  Imported: ${results.imported} data types\n`;
-    output += `  Skipped: ${results.skipped} data types\n`;
-    
-    if (results.errors.length > 0) {
-      output += `\nErrors:\n`;
-      for (const error of results.errors) {
-        output += `  - ${error.dataType}: ${error.error}\n`;
-      }
-    }
-    
-    if (options.dryRun) {
-      output += `\n(Dry run - no data was actually imported)`;
-    }
-    
-    return output;
-  } catch (error) {
-    if (error.name === 'SyntaxError') {
-      return `Error: Invalid JSON in import file: ${error.message}`;
-    }
-    throw error;
-  }
-}
-
-async function handleDeleteAllData(options) {
-  if (!options.force) {
-    return (
-      'WARNING: This will permanently delete ALL StaticRebel data!\n\n' +
-      'This includes:\n' +
-      '  - All skills and tracker data\n' +
-      '  - Memory files and conversations\n' +
-      '  - Configuration and preferences\n' +
-      '  - Checkpoints and backups\n' +
-      '  - Database and vector memory\n\n' +
-      'This action cannot be undone!\n\n' +
-      'To proceed, add --force flag: sr delete-all-data --force'
-    );
-  }
-  
-  console.log('GDPR Data Deletion - Removing all user data...');
-  
-  let progressUpdate = '';
-  options.onProgress = (current, total, operation) => {
-    progressUpdate = `${operation} (${current}/${total})`;
-    process.stdout.write(`\r${progressUpdate}`);
-  };
-  
-  try {
-    const startTime = Date.now();
-    const deletionLog = await deleteAllUserData(options);
-    
-    // Clear progress line
-    process.stdout.write(`\r${' '.repeat(progressUpdate.length)}\r`);
-    
-    const duration = Date.now() - startTime;
-    
-    let output = `Data deletion completed in ${duration}ms!\n\n`;
-    output += `Deleted paths: ${deletionLog.deletedPaths.length}\n`;
-    
-    if (deletionLog.errors.length > 0) {
-      output += `\nErrors during deletion:\n`;
-      for (const error of deletionLog.errors) {
-        output += `  - ${error.path}: ${error.error}\n`;
-      }
-    }
-    
-    if (options.dryRun) {
-      output += `\n(Dry run - no data was actually deleted)`;
-    } else {
-      output += `\nAll user data has been permanently removed.`;
-    }
-    
-    return output;
-  } catch (error) {
-    process.stdout.write(`\r${' '.repeat(progressUpdate.length)}\r`);
-    throw error;
-  }
-}
-
-function showExportHelp(command) {
-  switch (command) {
-    case 'export':
-      return `
-Usage: sr export [options]
-
-Export your StaticRebel data in JSON or CSV format.
-
-Options:
-  --format, -f <format>    Export format: json (default) or csv
-  --scope, -s <scope>      Data scope: all (default), skills, trackers, 
-                          memories, database, checkpoints, config
-  --output, -o <path>      Output file path (default: auto-generated)
-  --start-date <date>      Filter data from date (YYYY-MM-DD)
-  --end-date <date>        Filter data to date (YYYY-MM-DD)  
-  --skills <skill>         Export specific skills (can be repeated)
-  --csv                    Export as CSV (shortcut for --format csv)
-  --json                   Export as JSON (shortcut for --format json)
-
-Examples:
-  sr export                               # Export everything as JSON
-  sr export --csv                         # Export everything as CSV
-  sr export --scope skills --scope trackers  # Export only skills and trackers
-  sr export --skills water --skills pushups  # Export specific skills
-  sr export --start-date 2024-01-01      # Export data from Jan 1st 2024
-`;
-
-    case 'import':
-      return `
-Usage: sr import <file> [options]
-
-Import StaticRebel data from a JSON export file.
-
-Options:
-  --dry-run                Run without making changes
-
-Examples:
-  sr import export-2024-01-01.json       # Import data from export file
-  sr import backup.json --dry-run        # Preview import without changes
-`;
-
-    case 'delete-all-data':
-      return `
-Usage: sr delete-all-data [options]
-
-Permanently delete ALL StaticRebel user data (GDPR compliance).
-
-Options:
-  --force                  Required to actually delete data
-  --dry-run                Show what would be deleted without deleting
-
-Examples:
-  sr delete-all-data                      # Show deletion preview
-  sr delete-all-data --force              # Actually delete all data
-  sr delete-all-data --force --dry-run    # Show what would be deleted
-`;
-
-    default:
-      return `
-StaticRebel Data Export & Portability Commands:
-
-  export                   Export your data as JSON or CSV
-  import <file>            Import data from StaticRebel export
-  delete-all-data          GDPR-compliant data deletion
-
-Use 'sr <command> --help' for detailed usage information.
-`;
-  }
-}
-
-// Tab completion function
-function setupTabCompletion(rl) {
-  const commands = Object.keys(CLI_COMMANDS);
-  
-  rl.on('complete', (line) => {
-    const trimmed = line.trim();
-    
-    if (trimmed.startsWith('/')) {
-      // Command completion
-      const partial = trimmed.substring(1);
-      const matches = commands
-        .filter(cmd => cmd.substring(1).startsWith(partial))
-        .map(cmd => cmd.substring(1));
-      
-      return [matches, partial];
-    }
-    
-    // For non-command input, we could add skill name completion
-    return [[], line];
-  });
-}
-
-// Graceful shutdown handler
-function setupGracefulShutdown(rl) {
-  let shutdownInProgress = false;
-  
-  const gracefulShutdown = async () => {
-    if (shutdownInProgress) return;
-    shutdownInProgress = true;
-    
-    console.log(`\n\n${styles.warning('⚠️  Shutdown initiated...')}`);
-    
-    const spinner = startSpinner('Saving state and cleaning up...', 'yellow');
-    
-    try {
-      // Stop any running spinner
-      if (globalSpinner && globalSpinner !== spinner) {
-        globalSpinner.stop();
-      }
-      
-      // Save session end to memory
-      writeDailyMemory('[SESSION END]');
-      
-      updateSpinner('Finalizing session data...', 'yellow');
-      
-      // Give time for any pending operations
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      stopSpinner('State saved successfully', '✓', 'green');
-      
-      console.log(`${styles.success('✅ Goodbye! Your session data has been saved.')}`);
-      console.log(`${styles.dim('Thank you for using StaticRebel!')}\n`);
-      
-      rl.close();
-      process.exit(0);
-      
-    } catch (error) {
-      failSpinner('Cleanup error');
-      console.log(`${styles.error('Error during shutdown:')} ${error.message}`);
-      rl.close();
-      process.exit(1);
-    }
-  };
-  
-  // Handle Ctrl+C
-  process.on('SIGINT', gracefulShutdown);
-  process.on('SIGTERM', gracefulShutdown);
-  
-  // Handle readline close
-  rl.on('close', gracefulShutdown);
-  
-  return gracefulShutdown;
-}
 
 async function chatLoop() {
   const rl = readline.createInterface({
@@ -2458,43 +1874,22 @@ async function chatLoop() {
     output: process.stdout,
     terminal: true,
     prompt: '',
-    completer: (line) => {
-      const trimmed = line.trim();
-      
-      if (trimmed.startsWith('/')) {
-        // Command completion
-        const partial = trimmed.substring(1);
-        const commands = Object.keys(CLI_COMMANDS);
-        const matches = commands
-          .filter(cmd => cmd.substring(1).startsWith(partial))
-          .map(cmd => cmd);
-        
-        return [matches, trimmed];
-      }
-      
-      return [[], line];
-    }
   });
-
-  // Setup graceful shutdown
-  const gracefulShutdown = setupGracefulShutdown(rl);
 
   await loadPersona();
   await initChatHandler();
   writeDailyMemory('[SESSION START]');
 
-  console.log(`\n${styles.success('🤖 Charlize')} ${styles.dim('is ready!')}\n`);
+  console.log(`\n${styles.success('Charlize')} ${styles.dim('is ready!')}\n`);
 
-  // Enhanced startup help with new features highlighted
-  console.log(`${styles.heading('✨ Quick Commands:')}`);
+  // Show help on start
+  console.log(`${styles.heading('Quick Commands:')}`);
   console.log(`  ${styles.command('/help')}     ${styles.dim('Show all commands')}`);
-  console.log(`  ${styles.command('/stats')}    ${chalk.green('📊 Usage statistics (NEW!)')}`);
-  console.log(`  ${styles.command('/export')}   ${chalk.green('💾 Backup data (NEW!)')}`);
   console.log(`  ${styles.command('/status')}   ${styles.dim('System status')}`);
   console.log(`  ${styles.command('/models')}   ${styles.dim('List models')}`);
-  console.log(`  ${styles.command('/quit')}     ${styles.dim('Exit (Ctrl+C also works)')}`);
-  console.log(`  ${styles.dim('─'.repeat(45))}`);
-  console.log(`  ${chalk.yellow('💡 Tip:')} ${styles.dim('Tab completion works for commands!')}\n`);
+  console.log(`  ${styles.command('/history')} ${styles.dim('Session stats')}`);
+  console.log(`  ${styles.command('/quit')}     ${styles.dim('Exit')}`);
+  console.log(`  ${styles.dim('─'.repeat(40))}\n`);
 
   let inputBuffer = [];
   let isMultiLine = false;
@@ -2525,14 +1920,9 @@ async function chatLoop() {
       messageCount++;
       console.log('');
 
-      // Start spinner for LLM processing
-      const spinner = startSpinner('🧠 Thinking...', 'cyan');
-
       const startTime = Date.now();
       const result = await handleChat(message, { source: 'enhanced-cli' });
       const duration = Date.now() - startTime;
-
-      stopSpinner('Response generated', '✓', 'green');
 
       if (result.content) {
         console.log(`\n${styles.assistant(result.content)}\n`);
@@ -2558,7 +1948,9 @@ async function chatLoop() {
         const response = await command.execute();
         console.log(`\n${response}\n`);
       } else if (['/quit', '/exit', '/q', 'bye', 'goodbye'].includes(cmd.toLowerCase())) {
-        await gracefulShutdown();
+        writeDailyMemory('[SESSION END]');
+        console.log(`\n${styles.success('Goodbye! Talk soon!')}\n`);
+        rl.close();
         return;
       } else {
         console.log(`\n${styles.error(`Unknown command: ${cmd}`)}`);
@@ -2587,14 +1979,9 @@ async function chatLoop() {
       messageCount++;
       console.log('');
 
-      // Start spinner for LLM processing
-      const spinner = startSpinner('🧠 Processing...', 'cyan');
-
       const startTime = Date.now();
       const result = await handleChat(trimmed, { source: 'enhanced-cli' });
       const duration = Date.now() - startTime;
-
-      stopSpinner('Response ready', '✓', 'green');
 
       if (result.content) {
         console.log(`\n${styles.assistant(result.content)}\n`);
@@ -2656,8 +2043,6 @@ async function main() {
   // Check for marketplace commands
   if (args.length > 0) {
     const marketplaceCommands = ['install', 'uninstall', 'remove', 'search', 'list', 'update', 'publish', 'init', 'validate', 'stats'];
-    const exportCommands = ['export', 'import', 'delete-all-data'];
-    
     if (marketplaceCommands.includes(args[0])) {
       try {
         const result = await marketplaceCommand(args);
@@ -2665,41 +2050,6 @@ async function main() {
         return;
       } catch (error) {
         console.error('Marketplace error:', error.message);
-        return;
-      }
-    }
-    
-    // Check for social commands
-    if (args[0] === 'social') {
-      try {
-        const result = await socialCommand(args.slice(1));
-        console.log(result);
-        return;
-      } catch (error) {
-        console.error('Social error:', error.message);
-        return;
-      }
-    }
-    
-    if (exportCommands.includes(args[0])) {
-      try {
-        const result = await handleExportCommand(args);
-        console.log(result);
-        return;
-      } catch (error) {
-        console.error('Export error:', error.message);
-        return;
-      }
-    }
-    
-    // Check for personality command
-    if (args[0] === 'personality') {
-      try {
-        const result = await handlePersonalityCommand(args.slice(1));
-        console.log(result);
-        return;
-      } catch (error) {
-        console.error('Personality error:', error.message);
         return;
       }
     }
