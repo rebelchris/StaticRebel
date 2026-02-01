@@ -1,0 +1,37 @@
+🏆 GOAL COMPLETED! 🏆
+=====================================
+
+✅ {{goalName}}
+
+Completed on {{date}}
+
+🎉 OUTSTANDING ACHIEVEMENT! 🎉
+
+You've successfully completed your goal! This is a testament to your dedication, 
+persistence, and commitment to growth. Take a moment to celebrate this victory!
+
+📊 Your Achievement Stats
+• Days to Complete: {{daysToComplete}}
+• Tasks Done: {{tasksCompleted}}
+• Progress Made: {{totalProgress}}
+
+{{#if timeline}}
+📅 Your Journey
+{{#each timeline}}
+{{this.date}}: {{this.event}}
+{{/each}}
+{{/if}}
+
+🚀 What's Next?
+Now that you've achieved this goal, consider:
+• Setting a new, more challenging goal
+• Celebrating your success with something special
+• Sharing your achievement with others
+• Reflecting on what you learned during this journey
+
+🌟 You Did It!
+This goal is now part of your success story. Use this momentum to reach even greater heights!
+
+Congratulations on this amazing achievement! 🎊
+
+StaticRebel • {{year}}

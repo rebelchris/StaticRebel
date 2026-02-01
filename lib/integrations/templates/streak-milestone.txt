@@ -1,0 +1,25 @@
+🔥 STREAK MILESTONE REACHED! 🔥
+=====================================
+
+{{milestone}} DAYS - {{streakType}} Streak
+
+🎉 CONGRATULATIONS! 🎉
+
+You've maintained your {{streakType}} streak for {{milestone}} consecutive days! 
+Your dedication and consistency are truly paying off.
+
+📊 Your Stats
+• Days Strong: {{milestone}}
+• Success Rate: {{percentage}}%
+• Days Active: {{totalDays}}
+
+🌟 Why This Matters
+Building habits through consistency is one of the most powerful ways to achieve your goals. 
+Each day you maintain this streak, you're reinforcing positive patterns that will serve you for life.
+
+🚀 Keep the Momentum!
+You're on fire! Don't let this amazing streak end here. Tomorrow is day {{nextDay}}!
+
+Share your success! You've earned it. 🏆
+
+StaticRebel • {{year}}

@@ -1,0 +1,57 @@
+{
+  "bot": {
+    "token": "YOUR_DISCORD_BOT_TOKEN",
+    "clientId": "YOUR_DISCORD_CLIENT_ID",
+    "guildId": "YOUR_GUILD_ID_FOR_DEVELOPMENT",
+    "prefix": "sr!"
+  },
+  "channels": {
+    "default": "CHANNEL_ID_FOR_DEFAULT_NOTIFICATIONS",
+    "logs": "CHANNEL_ID_FOR_LOG_ENTRIES",
+    "announcements": "CHANNEL_ID_FOR_STREAK_ANNOUNCEMENTS",
+    "challenges": "CHANNEL_ID_FOR_CHALLENGE_LEADERBOARDS"
+  },
+  "webhook": {
+    "url": "YOUR_DISCORD_WEBHOOK_URL",
+    "username": "StaticRebel",
+    "avatarUrl": ""
+  },
+  "features": {
+    "autoLogging": {
+      "enabled": false,
+      "keywords": ["completed", "finished", "done", "achieved"],
+      "channels": ["ALLOWED_CHANNEL_IDS"]
+    },
+    "streakAnnouncements": {
+      "enabled": true,
+      "milestones": [7, 14, 30, 60, 90, 180, 365],
+      "channel": "STREAK_ANNOUNCEMENT_CHANNEL_ID"
+    },
+    "challengeLeaderboards": {
+      "enabled": true,
+      "updateInterval": "daily",
+      "channel": "LEADERBOARD_CHANNEL_ID"
+    },
+    "nudges": {
+      "enabled": true,
+      "maxPerUser": 5,
+      "defaultChannel": "dm"
+    }
+  },
+  "permissions": {
+    "adminRoles": ["ADMIN_ROLE_ID"],
+    "moderatorRoles": ["MODERATOR_ROLE_ID"],
+    "allowedChannels": ["ALLOWED_CHANNEL_IDS"],
+    "restrictedCommands": {
+      "challenge.create": ["ADMIN_ROLE_ID"],
+      "nudge.schedule": ["USER_ROLE_ID"]
+    }
+  },
+  "integrations": {
+    "staticRebel": {
+      "trackingCategories": ["work", "exercise", "learning", "personal", "health"],
+      "syncInterval": 300000,
+      "dataPath": "./data/discord"
+    }
+  }
+}

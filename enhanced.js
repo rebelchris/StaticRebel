@@ -24,9 +24,11 @@ import { loadConfig } from './lib/configManager.js';
 import { marketplaceCommand } from './lib/marketplace/cli.js';
 import { socialCommand } from './lib/social/cli.js';
 import { handlePersonalityCommand } from './lib/personality/cli.js';
+import { emailCommand } from './lib/integrations/cli.js';
 import { apiCommand } from './lib/api/cli.js';
 import { slackCommand } from './lib/integrations/slack.js';
 import { notionCommand } from './lib/integrations/notion-cli.js';
+import { webhookCommand } from './lib/integrations/webhooks-cli.js';
 import {
   initMemory,
   getMemoryStats,
@@ -2448,6 +2450,243 @@ Use 'sr <command> --help' for detailed usage information.
   }
 }
 
+// ============================================================================
+// Analytics and Reporting Command Handler
+// ============================================================================
+
+async function handleReportCommand(args) {
+  const command = args[0];
+  const options = {};
+  
+  // Parse command line arguments
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '--format' || arg === '-f') {
+      options.format = args[i + 1];
+      i++; // Skip next arg
+    } else if (arg === '--output' || arg === '-o') {
+      options.outputPath = args[i + 1];
+      i++; // Skip next arg
+    } else if (arg === '--date' || arg === '-d') {
+      options.date = args[i + 1];
+      i++; // Skip next arg
+    } else if (arg === '--save') {
+      options.save = true;
+    } else if (arg === '--auto') {
+      options.auto = true;
+    } else if (arg === '--schedule') {
+      options.schedule = true;
+    } else if (arg === '--help' || arg === '-h') {
+      return showReportHelp(command);
+    }
+  }
+
+  // Set defaults
+  if (!options.format) options.format = 'terminal';
+  
+  const reportDate = options.date ? new Date(options.date) : new Date();
+
+  try {
+    let report;
+    
+    switch (command) {
+      case 'daily':
+        report = await generateDailyReport(reportDate);
+        break;
+      case 'weekly':
+        report = await generateWeeklyReport(reportDate);
+        break;
+      case 'monthly':
+        report = await generateMonthlyReport(reportDate);
+        break;
+      case 'yearly':
+        report = await generateYearlyReport(reportDate);
+        break;
+      case 'schedule':
+        await scheduleAutomaticReports();
+        return '✅ Automatic reports have been scheduled successfully!\n\n' +
+               'Daily reports: 9:00 PM every day\n' +
+               'Weekly reports: 8:00 PM every Sunday\n' +
+               'Monthly reports: 9:00 AM on the 1st of each month';
+      case 'help':
+      default:
+        return showReportHelp();
+    }
+
+    if (!report) {
+      return 'Error: Unable to generate report. No data available.';
+    }
+
+    // Format output
+    let output = '';
+    switch (options.format) {
+      case 'markdown':
+      case 'md':
+        output = formatReportAsMarkdown(report);
+        break;
+      case 'html':
+        output = formatReportAsHTML(report);
+        break;
+      case 'json':
+        output = JSON.stringify(report, null, 2);
+        break;
+      case 'terminal':
+      default:
+        output = formatReportAsTerminal(report);
+        break;
+    }
+
+    // Save to file if requested
+    if (options.save || options.outputPath) {
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = options.outputPath || 
+                      `${command}-report-${timestamp}.${options.format === 'terminal' ? 'txt' : options.format}`;
+      
+      const savedPath = await saveReportToFile(report, 
+        options.format === 'terminal' ? 'markdown' : options.format, 
+        filename);
+      
+      output += `\n📁 Report saved to: ${savedPath}\n`;
+    }
+
+    // Return the formatted output
+    return output;
+
+  } catch (error) {
+    return `Error generating ${command} report: ${error.message}`;
+  }
+}
+
+function showReportHelp(command) {
+  if (command) {
+    switch (command) {
+      case 'daily':
+        return `
+Usage: sr report daily [options]
+
+Generate a daily summary report with completion rates and activity breakdown.
+
+Options:
+  --date, -d <date>        Report date (YYYY-MM-DD, default: today)
+  --format, -f <format>    Output format: terminal (default), markdown, html, json
+  --output, -o <file>      Save to file (optional)
+  --save                   Save to auto-generated filename
+
+Examples:
+  sr report daily                         # Today's report in terminal
+  sr report daily --date 2024-01-15      # Specific date
+  sr report daily --format markdown --save # Save as markdown
+`;
+
+      case 'weekly':
+        return `
+Usage: sr report weekly [options]
+
+Generate a weekly analytics report with trends and correlations.
+
+Options:
+  --date, -d <date>        Report week containing this date (default: this week)
+  --format, -f <format>    Output format: terminal (default), markdown, html, json
+  --output, -o <file>      Save to file (optional)
+  --save                   Save to auto-generated filename
+
+Examples:
+  sr report weekly                        # This week's report
+  sr report weekly --date 2024-01-15     # Week containing Jan 15th
+  sr report weekly --format html --save  # Save as HTML
+`;
+
+      case 'monthly':
+        return `
+Usage: sr report monthly [options]
+
+Generate a monthly review with best/worst days analysis and detailed insights.
+
+Options:
+  --date, -d <date>        Report month containing this date (default: this month)
+  --format, -f <format>    Output format: terminal (default), markdown, html, json
+  --output, -o <file>      Save to file (optional)
+  --save                   Save to auto-generated filename
+
+Examples:
+  sr report monthly                       # This month's report
+  sr report monthly --date 2024-01-01    # January 2024 report
+  sr report monthly --format json        # JSON format
+`;
+
+      case 'yearly':
+        return `
+Usage: sr report yearly [options]
+
+Generate a comprehensive year in review with all metrics and achievements.
+
+Options:
+  --date, -d <date>        Report year containing this date (default: this year)
+  --format, -f <format>    Output format: terminal (default), markdown, html, json
+  --output, -o <file>      Save to file (optional)
+  --save                   Save to auto-generated filename
+
+Examples:
+  sr report yearly                        # This year's report
+  sr report yearly --date 2023-06-15     # Year 2023 report
+  sr report yearly --format html --save  # Full HTML report
+`;
+
+      case 'schedule':
+        return `
+Usage: sr report schedule
+
+Set up automatic report generation on a schedule.
+
+This will configure:
+  - Daily reports at 9:00 PM
+  - Weekly reports on Sunday at 8:00 PM  
+  - Monthly reports on the 1st at 9:00 AM
+
+Examples:
+  sr report schedule                      # Set up automatic reports
+`;
+
+      default:
+        return showReportHelp();
+    }
+  }
+
+  return `
+StaticRebel Analytics & Reporting Commands:
+
+📊 REPORT TYPES:
+  daily                    Daily summary with completion rates
+  weekly                   Weekly trends and correlations
+  monthly                  Monthly review with best/worst days
+  yearly                   Comprehensive year in review
+
+🔧 REPORT MANAGEMENT:
+  schedule                 Set up automatic report generation
+
+📤 OUTPUT OPTIONS:
+  --format terminal        Display in terminal (default)
+  --format markdown        Markdown format
+  --format html           HTML format  
+  --format json           JSON format
+  --save                  Save to auto-generated file
+  --output <file>         Save to specific file
+
+📅 DATE OPTIONS:
+  --date <YYYY-MM-DD>     Generate report for specific date/period
+
+Examples:
+  sr report daily                         # Quick daily summary
+  sr report weekly --save                 # Save weekly report
+  sr report monthly --format html        # HTML monthly review
+  sr report yearly --date 2023-01-01     # 2023 year in review
+  sr report schedule                      # Set up automation
+
+Use 'sr report <type> --help' for detailed information about each report type.
+`;
+}
+
 // Tab completion function
 function setupTabCompletion(rl) {
   const commands = Object.keys(CLI_COMMANDS);
@@ -2751,6 +2990,30 @@ async function main() {
       }
     }
     
+    // Check for email commands
+    if (args[0] === 'email') {
+      try {
+        const result = await emailCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Email error:', error.message);
+        return;
+      }
+    }
+    
+    // Check for notion commands
+    if (args[0] === 'notion') {
+      try {
+        const result = await notionCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Notion error:', error.message);
+        return;
+      }
+    }
+    
     // Check for slack commands
     if (args[0] === 'slack') {
       try {
@@ -2761,6 +3024,18 @@ async function main() {
         return;
       } catch (error) {
         console.error('Slack error:', error.message);
+        return;
+      }
+    }
+    
+    // Check for webhook commands
+    if (args[0] === 'webhook' || args[0] === 'webhooks') {
+      try {
+        const result = await webhookCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Webhook error:', error.message);
         return;
       }
     }
@@ -2830,8 +3105,17 @@ async function main() {
   await initChatHandler();
 
   // Start background services
-  startScheduler((job) => {
+  startScheduler(async (job) => {
     console.log(`\n[Scheduled Task] ${job.name}\n`);
+    
+    // Handle different job types
+    if (job.data?.type === 'email') {
+      const { executeEmailJob } = await import('./lib/integrations/email-cron.js');
+      await executeEmailJob(job);
+    } else {
+      // Handle other job types here (existing functionality)
+      console.log(`[Cron] Executed: ${job.name}`);
+    }
   });
 
   startHeartbeatMonitor((results) => {

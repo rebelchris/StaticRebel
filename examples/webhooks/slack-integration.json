@@ -1,0 +1,50 @@
+{
+  "name": "Slack Journal Notifications",
+  "description": "Send journal entries to Slack channel",
+  "webhook": {
+    "name": "Slack Journal Alerts",
+    "url": "${SLACK_WEBHOOK_URL}",
+    "event": "entry_logged",
+    "template": {
+      "text": "📝 New journal entry logged!",
+      "attachments": [
+        {
+          "color": "good",
+          "fields": [
+            {
+              "title": "Content",
+              "value": "{{entry.content}}",
+              "short": false
+            },
+            {
+              "title": "Mood",
+              "value": "{{entry.mood}}",
+              "short": true
+            },
+            {
+              "title": "Tags",
+              "value": "{{#if entry.tags}}{{entry.tags}}{{else}}No tags{{/if}}",
+              "short": true
+            },
+            {
+              "title": "Time",
+              "value": "{{timestamp}}",
+              "short": true
+            }
+          ],
+          "footer": "StaticRebel Journal",
+          "footer_icon": "https://example.com/staticrebel-icon.png"
+        }
+      ]
+    }
+  },
+  "setup_instructions": [
+    "1. Go to your Slack workspace settings",
+    "2. Navigate to 'Apps' > 'Incoming Webhooks'",
+    "3. Click 'Add to Slack' and select a channel",
+    "4. Copy the webhook URL",
+    "5. Replace the URL in this configuration",
+    "6. Run: sr webhook add --name \"Slack Journal Alerts\" --url \"YOUR_WEBHOOK_URL\" --event \"entry_logged\""
+  ],
+  "curl_example": "curl -X POST 'YOUR_WEBHOOK_URL' -H 'Content-Type: application/json' -d '{\"text\":\"Test from StaticRebel!\"}'"
+}

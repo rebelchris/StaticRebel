@@ -1,0 +1,62 @@
+{
+  "name": "Discord Streak Notifications",
+  "description": "Celebrate streak milestones in Discord",
+  "webhook": {
+    "name": "Discord Streak Celebrations",
+    "url": "https://discord.com/api/webhooks/000000000000000000/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "event": "streak_milestone",
+    "template": {
+      "content": "🎉 **Streak Milestone Achieved!** 🎉",
+      "embeds": [
+        {
+          "title": "{{streak.achievement}}",
+          "description": "Congratulations! You've maintained your {{streak.type}} streak for **{{streak.current_count}} days**! 🔥",
+          "color": 5814783,
+          "fields": [
+            {
+              "name": "Streak Type",
+              "value": "{{streak.type}}",
+              "inline": true
+            },
+            {
+              "name": "Days Count",
+              "value": "{{streak.current_count}}",
+              "inline": true
+            },
+            {
+              "name": "Milestone",
+              "value": "{{streak.milestone}}",
+              "inline": true
+            }
+          ],
+          "thumbnail": {
+            "url": "https://example.com/trophy-icon.png"
+          },
+          "footer": {
+            "text": "StaticRebel Streak Tracker",
+            "icon_url": "https://example.com/staticrebel-icon.png"
+          },
+          "timestamp": "{{timestamp}}"
+        }
+      ]
+    }
+  },
+  "milestones": {
+    "7": "Week Champion! 🏆",
+    "14": "Two Week Warrior! ⚔️",
+    "30": "Monthly Master! 🎯", 
+    "60": "Two Month Hero! 🦸",
+    "90": "Quarterly Legend! 👑",
+    "365": "Year-Long Champion! 🏅"
+  },
+  "setup_instructions": [
+    "1. Go to your Discord server settings",
+    "2. Navigate to 'Integrations' > 'Webhooks'", 
+    "3. Click 'Create Webhook'",
+    "4. Choose the channel and customize the name/avatar",
+    "5. Copy the Webhook URL",
+    "6. Replace the URL in this configuration",
+    "7. Run: sr webhook add --name \"Discord Streak Celebrations\" --url \"YOUR_WEBHOOK_URL\" --event \"streak_milestone\""
+  ],
+  "test_command": "sr webhook test <webhook-id>"
+}

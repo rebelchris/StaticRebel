@@ -1,0 +1,81 @@
+{
+  "name": "Zapier Goal Automation",
+  "description": "Trigger Zapier workflows when goals are reached",
+  "webhook": {
+    "name": "Zapier Goal Triggers",
+    "url": "https://hooks.zapier.com/hooks/catch/12345/abcdef/",
+    "event": "goal_reached",
+    "template": {
+      "event": "goal_reached",
+      "timestamp": "{{timestamp}}",
+      "user_id": "{{user_id}}",
+      "goal": {
+        "id": "{{goal.id}}",
+        "title": "{{goal.title}}",
+        "target": "{{goal.target}}",
+        "achieved_value": "{{goal.achieved_value}}",
+        "completion_date": "{{goal.completion_date}}",
+        "category": "{{goal.category}}",
+        "priority": "{{goal.priority}}"
+      },
+      "celebration_message": "🎯 Goal achieved: {{goal.title}}!"
+    }
+  },
+  "automation_ideas": [
+    {
+      "trigger": "goal_reached",
+      "action": "Send email celebration",
+      "description": "Email yourself when you complete goals"
+    },
+    {
+      "trigger": "goal_reached", 
+      "action": "Add to Google Sheets",
+      "description": "Track goal completions in a spreadsheet"
+    },
+    {
+      "trigger": "goal_reached",
+      "action": "Post to Twitter",
+      "description": "Share your achievements on social media"
+    },
+    {
+      "trigger": "goal_reached",
+      "action": "Send SMS",
+      "description": "Get text message celebrations"
+    },
+    {
+      "trigger": "goal_reached",
+      "action": "Update task manager",
+      "description": "Mark related tasks as complete in Todoist/Asana"
+    }
+  ],
+  "setup_instructions": [
+    "1. Create a free Zapier account at zapier.com",
+    "2. Create a new Zap with 'Webhooks by Zapier' trigger",
+    "3. Choose 'Catch Hook' as the trigger event",
+    "4. Copy the webhook URL from Zapier",
+    "5. Replace the URL in this configuration",
+    "6. Add the webhook: sr webhook add --name \"Zapier Goal Triggers\" --url \"YOUR_ZAPIER_URL\" --event \"goal_reached\"",
+    "7. Test the webhook: sr webhook test <webhook-id>",
+    "8. Complete your Zap by adding an action (email, sheets, etc.)",
+    "9. Turn on your Zap!"
+  ],
+  "sample_zap_steps": [
+    {
+      "step": 1,
+      "app": "Webhooks by Zapier",
+      "action": "Catch Hook",
+      "description": "Receive goal completion data"
+    },
+    {
+      "step": 2,
+      "app": "Gmail",
+      "action": "Send Email",
+      "description": "Send celebration email to yourself",
+      "config": {
+        "to": "your-email@example.com",
+        "subject": "🎯 Goal Achieved: {{goal.title}}",
+        "body": "Congratulations! You completed your goal: {{goal.title}} on {{goal.completion_date}}"
+      }
+    }
+  ]
+}
