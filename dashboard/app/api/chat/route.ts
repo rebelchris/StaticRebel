@@ -149,7 +149,7 @@ async function handleCommand(sm: any, parsed: any): Promise<string> {
 }
 
 async function handleQuery(sm: any, parsed: any): Promise<string> {
-  // General query - show all skills
+  // General query - show all skills (only if it's a genuine progress query)
   if (!parsed.skillId) {
     const skills = sm.getAllSkills();
     if (skills.length === 0) {
@@ -433,6 +433,13 @@ function pickRandom<T>(arr: T[]): T {
 }
 
 function getUnknownResponse(message: string): string {
+  // Check if it's a general question (not skill-related)
+  const isGeneralQuestion = /\?$/.test(message) && !/water|coffee|steps|push ?ups?|exercise|sleep|mood|meditat|reading|track|log|skill/i.test(message);
+  
+  if (isGeneralQuestion) {
+    return "I'm a habit tracker — I can help you log and track activities, but I can't answer general questions.\n\nTry:\n• \"drank 500ml water\"\n• \"how's my progress?\"";
+  }
+  
   // Check if it contains a number - might be trying to log
   if (/\d/.test(message)) {
     return "I see you mentioned a number, but I'm not sure what to track.\n\nTry being more specific:\n• \"drank 500ml water\"\n• \"did 20 pushups\"\n• \"walked 3km\"";
