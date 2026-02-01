@@ -24,12 +24,16 @@ import { loadConfig } from './lib/configManager.js';
 import { marketplaceCommand } from './lib/marketplace/cli.js';
 import { socialCommand } from './lib/social/cli.js';
 import { handlePersonalityCommand } from './lib/personality/cli.js';
+import { handleBrowserCommand } from './lib/browser/cli.js';
 import { emailCommand } from './lib/integrations/cli.js';
+import { gmailCommand } from './lib/integrations/gmail-cli.js';
 import { apiCommand } from './lib/api/cli.js';
 import { slackCommand } from './lib/integrations/slack.js';
 import { notionCommand } from './lib/integrations/notion-cli.js';
 import { webhookCommand } from './lib/integrations/webhooks-cli.js';
 import { integrationCommand } from './lib/integrations/dynamic/cli.js';
+import { mediaCommand } from './lib/media/cli.js';
+import { speakCommand } from './lib/tts/cli.js';
 import {
   initMemory,
   getMemoryStats,
@@ -3003,6 +3007,18 @@ async function main() {
       }
     }
     
+    // Check for Gmail commands
+    if (args[0] === 'gmail') {
+      try {
+        const result = await gmailCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Gmail error:', error.message);
+        return;
+      }
+    }
+    
     // Check for notion commands
     if (args[0] === 'notion') {
       try {
@@ -3055,6 +3071,18 @@ async function main() {
       }
     }
     
+    // Check for media commands
+    if (args[0] === 'media') {
+      try {
+        const result = await mediaCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Media error:', error.message);
+        return;
+      }
+    }
+    
     if (exportCommands.includes(args[0])) {
       try {
         const result = await handleExportCommand(args);
@@ -3086,6 +3114,29 @@ async function main() {
         return;
       } catch (error) {
         console.error('API error:', error.message);
+        return;
+      }
+    }
+    
+    // Check for browser command
+    if (args[0] === 'browser') {
+      try {
+        const result = await handleBrowserCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Browser error:', error.message);
+        return;
+      }
+    }
+    
+    // Check for speak command
+    if (args[0] === 'speak') {
+      try {
+        await speakCommand(args.slice(1));
+        return;
+      } catch (error) {
+        console.error('Speak error:', error.message);
         return;
       }
     }
