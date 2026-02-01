@@ -1,0 +1,46 @@
+{
+  "name": "IFTTT Smart Home Integration",
+  "description": "Connect StaticRebel nudges to smart home automation",
+  "webhook": {
+    "name": "IFTTT Smart Home Triggers",
+    "url": "https://maker.ifttt.com/trigger/staticrebel_nudge/with/key/YOUR_IFTTT_KEY",
+    "event": "nudge",
+    "template": {
+      "value1": "{{nudge.type}}",
+      "value2": "{{nudge.message}}",
+      "value3": "{{nudge.priority}}"
+    }
+  },
+  "automation_scenarios": [
+    {
+      "trigger": "Morning routine nudge",
+      "actions": [
+        "Turn on bedroom lights gradually",
+        "Start coffee maker",
+        "Play energizing music",
+        "Display weather on smart display"
+      ]
+    },
+    {
+      "trigger": "Exercise nudge", 
+      "actions": [
+        "Turn on workout playlist",
+        "Adjust thermostat for exercise",
+        "Turn on gym lights",
+        "Start fitness tracking"
+      ]
+    }
+  ],
+  "setup_instructions": [
+    "1. Create a free IFTTT account at ifttt.com",
+    "2. Go to 'My Applets' > 'Create'",
+    "3. Click 'If This' and search for 'Webhooks'",
+    "4. Choose 'Receive a web request'",
+    "5. Set event name as 'staticrebel_nudge'",
+    "6. Click 'Then That' and choose your smart home device",
+    "7. Configure the action (turn on lights, etc.)",
+    "8. Get your IFTTT webhook key from: https://ifttt.com/maker_webhooks",
+    "9. Replace YOUR_IFTTT_KEY in the webhook URL",
+    "10. Add webhook: sr webhook add --name \"IFTTT Smart Home\" --url \"YOUR_WEBHOOK_URL\" --event \"nudge\""
+  ]
+}
