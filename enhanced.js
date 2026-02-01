@@ -240,6 +240,21 @@ const INTENT_PATTERNS = {
     /forget/i,
   ],
 
+  // Text-to-Speech / Voice
+  tts: [
+    /read (this|that|it) (aloud|out loud)/i,
+    /speak (this|that|it)/i,
+    /say (this|that|it) (aloud|out loud)/i,
+    /(read|speak|say) the (daily )?summary/i,
+    /convert to speech/i,
+    /turn into voice/i,
+    /voice (this|that|it)/i,
+    /text to speech/i,
+    /tts/i,
+    /speak .+/i,
+    /read aloud/i,
+  ],
+
   // Heartbeat / Status
   status: [
     /how are you/i,
@@ -820,6 +835,7 @@ function handleHelp() {
     `**Tracking**\n"I had a cappuccino, log it"\n"Log 450 calories for my sandwich"\n"How many calories today?"\n\n` +
     `**Memory**\n"What did we talk about today?"\n"Show me my memory stats"\n"Curate my memories"\n\n` +
     `**Level 2 Features**\n"Be more concise" - Adjust my personality\n"Remember this information" - Store in vector memory\n"Create a project" - Generate TODO.md with background tasks\n"Connect to API" - Set up dynamic API connectors\n\n` +
+    `**Email & Communication**\n"Check my email" - Get unread email summary\n"Send an email to john@example.com about the meeting"\n"Search my emails for invoices"\n"Find emails from GitHub"\n\n` +
     `**Level 3: Web Oracle (Research)**\n"Research the latest AI developments"\n"Investigate climate change technologies"\n"What's new in quantum computing?"\n"Research Rust vs C++ performance"\n\n` +
     `**Level 3: Orchestrator (Claude Code)**\n"Debug this complex bug in my codebase"\n"Refactor the entire project structure"\n"Do a full architecture review"\n"Use claude code for a complete rewrite"\n\n` +
     `**Current Information**\n"Search for latest AI news"\n"What's new in tech?"\n"What's happening today?"\n\n` +
