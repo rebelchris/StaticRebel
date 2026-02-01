@@ -1698,7 +1698,7 @@ Respond with ONLY JSON (no markdown):
 }`;
 
   try {
-    const response = await askOllama([
+    const response = await askOllamaDirect([
       {
         role: 'system',
         content: 'You are a code reviewer. Output ONLY valid JSON.',
@@ -1732,7 +1732,7 @@ function formatMessage(text) {
     .replace(/\*(.*?)\*/g, '\x1b[3m$1\x1b[0m');
 }
 
-function askOllama(messages) {
+function askOllamaDirect(messages) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify({ model: MODEL, messages, stream: false });
 
