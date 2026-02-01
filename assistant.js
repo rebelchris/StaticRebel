@@ -39,13 +39,25 @@ import {
   getMemoryStats,
   readLongTermMemory,
 } from './lib/memoryManager.js';
+// LLM abstraction (NEW)
 import {
+  initLLM,
+  getLLMManager,
+  askOllama,
+  chatCompletion,
+  streamCompletion,
+  createEmbeddings,
   listAvailableModels,
   getModelForTask,
-  detectTaskType,
-  chatCompletion,
   getDefaultModel,
-  createEmbeddings,
+  checkProviderHealth,
+  getUsageStats,
+  updateLLMConfig,
+} from './lib/llm-migration.js';
+
+// Legacy model registry (DEPRECATED - keeping for compatibility)
+import {
+  detectTaskType,
 } from './lib/modelRegistry.js';
 import {
   startScheduler,
@@ -140,10 +152,18 @@ import {
 // Configuration
 // ============================================================================
 
+// Legacy Ollama configuration (DEPRECATED - use LLM config instead)
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 const MODEL = getDefaultModel();
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
 const VISION_MODEL = process.env.VISION_MODEL || 'llava';
+
+// LLM Configuration (NEW - supports multiple providers)
+// Configuration now managed through config files and environment variables:
+// - OPENAI_API_KEY: OpenAI API key
+// - ANTHROPIC_API_KEY: Anthropic API key  
+// - GROQ_API_KEY: Groq API key
+// - OLLAMA_HOST: Ollama server URL (default: http://localhost:11434)
 const MEMORY_FILE = path.join(os.homedir(), '.static-rebel', 'memory', 'memories.json');
 const PROFILE_FILE =
   process.env.PROFILE_FILE ||
@@ -5979,6 +5999,10 @@ function watchTelegramConfig() {
 
 // Main
 async function main() {
+  // Initialize LLM manager with multi-provider support
+  console.log('🧠 Initializing LLM providers...');
+  await initLLM();
+
   // Initialize chat handler
   await initChatHandler();
 
