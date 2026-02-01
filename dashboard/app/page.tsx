@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { UserProfile } from '@/components/UserProfile';
+import { PWAFeatures } from '@/components/PWAFeatures';
 
 interface Conversation {
   id: string;
@@ -236,6 +237,11 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* PWA Features */}
+      <div className='mt-8'>
+        <PWAFeatures />
       </div>
     </div>
   );

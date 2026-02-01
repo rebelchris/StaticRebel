@@ -1,0 +1,25 @@
+{
+  "name": "StaticRebel Dashboard",
+  "short_name": "StaticRebel",
+  "description": "AI Assistant Dashboard powered by local LLMs - Your personal AI companion for productivity and creativity",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1f2937",
+  "background_color": "#111827",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
