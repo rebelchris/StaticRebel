@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Palette, Bell, Save, Check } from 'lucide-react';
+import { User, Palette, Bell, Save, Check, Smartphone, Wifi } from 'lucide-react';
 import { clsx } from 'clsx';
+import NotificationManager from '@/components/NotificationManager';
+import OfflineManager from '@/components/OfflineManager';
 
 interface UserProfile {
   name: string;
@@ -207,12 +209,67 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Notifications Section */}
+        {/* PWA Mobile App Section */}
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center mb-4">
+              <Smartphone className="h-5 w-5 text-gray-400 mr-2" />
+              <h3 className="text-lg font-medium text-gray-900">Mobile App</h3>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Install StaticRebel as a mobile app for quick access and offline functionality.
+              </p>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">How to install:</h4>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Open this page in your mobile browser</li>
+                  <li>Look for the "Add to Home Screen" prompt</li>
+                  <li>Tap "Install" to add the app to your home screen</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Push Notifications Section */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <div className="flex items-center mb-4">
               <Bell className="h-5 w-5 text-gray-400 mr-2" />
-              <h3 className="text-lg font-medium text-gray-900">Notifications</h3>
+              <h3 className="text-lg font-medium text-gray-900">Push Notifications</h3>
+            </div>
+            
+            <NotificationManager />
+          </div>
+        </div>
+
+        {/* Offline Support Section */}
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center mb-4">
+              <Wifi className="h-5 w-5 text-gray-400 mr-2" />
+              <h3 className="text-lg font-medium text-gray-900">Offline Support</h3>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Your skill logs and interactions are automatically saved when offline and synced when you're back online.
+              </p>
+              
+              <OfflineManager />
+            </div>
+          </div>
+        </div>
+
+        {/* Legacy Notifications Section for backward compatibility */}
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center mb-4">
+              <Bell className="h-5 w-5 text-gray-400 mr-2" />
+              <h3 className="text-lg font-medium text-gray-900">General Settings</h3>
             </div>
 
             <div className="flex items-center">
@@ -235,7 +292,7 @@ export default function Settings() {
                 htmlFor="notifications"
                 className="ml-2 block text-sm text-gray-900"
               >
-                Enable notifications
+                Enable system notifications
               </label>
             </div>
           </div>

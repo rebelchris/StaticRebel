@@ -1,3 +1,21 @@
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  runtimeCaching: [
+    {
+      urlPattern: /^https?.*/,
+      handler: 'NetworkFirst',
+      options: {
+        cacheName: 'offlineCache',
+        expiration: {
+          maxEntries: 200,
+        },
+      },
+    },
+  ],
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Allow importing from parent directory (lib folder)
@@ -16,6 +34,9 @@ const nextConfig = {
     },
   },
 
+  // Add empty turbopack config to suppress the error for now
+  turbopack: {},
+  
   // Custom webpack config to handle external modules
   webpack: (config, { isServer }) => {
     if (isServer) {
@@ -28,4 +49,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withPWA(nextConfig);
