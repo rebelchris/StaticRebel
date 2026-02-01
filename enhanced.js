@@ -27,6 +27,7 @@ import { handlePersonalityCommand } from './lib/personality/cli.js';
 import { handleBrowserCommand } from './lib/browser/cli.js';
 import { emailCommand } from './lib/integrations/cli.js';
 import { gmailCommand } from './lib/integrations/gmail-cli.js';
+import { whatsappCommand } from './lib/integrations/whatsapp-cli.js';
 import { apiCommand } from './lib/api/cli.js';
 import { slackCommand } from './lib/integrations/slack.js';
 import { notionCommand } from './lib/integrations/notion-cli.js';
@@ -3031,6 +3032,18 @@ async function main() {
         return;
       } catch (error) {
         console.error('Gmail error:', error.message);
+        return;
+      }
+    }
+
+    // Check for WhatsApp commands
+    if (args[0] === 'whatsapp') {
+      try {
+        const result = await whatsappCommand(args.slice(1));
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('WhatsApp error:', error.message);
         return;
       }
     }
