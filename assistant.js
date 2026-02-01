@@ -70,6 +70,10 @@ import {
   getSchedulerStatus,
 } from './lib/cronScheduler.js';
 import {
+  startScheduling,
+  getSchedulingStatus
+} from './lib/scheduling/index.js';
+import {
   startHeartbeatMonitor,
   getHeartbeatStatus,
   performAllScheduledChecks,
@@ -6005,6 +6009,26 @@ async function main() {
 
   // Initialize chat handler
   await initChatHandler();
+
+  // Start natural language scheduling system
+  console.log('⏰ Starting natural language scheduling...');
+  startScheduling((job) => {
+    // Execute scheduled tasks/reminders
+    const taskMessage = job.task?.message || job.description;
+    const userMessage = `🔔 Reminder: ${taskMessage}`;
+    
+    // Send reminder via Telegram if available
+    if (telegramBot) {
+      const chatId = config.telegram?.chatId;
+      if (chatId) {
+        telegramBot.sendMessage(chatId, userMessage);
+      }
+    }
+    
+    // Log the reminder execution
+    writeDailyMemory(`Executed scheduled reminder: ${taskMessage}`);
+    console.log(`⏰ ${userMessage}`);
+  });
 
   // Start Telegram bot
   await startTelegramBot();
