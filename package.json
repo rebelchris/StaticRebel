@@ -19,7 +19,8 @@
     "dashboard:start": "cd dashboard && npm run start",
     "install-db": "npm install better-sqlite3",
     "postinstall": "cd dashboard && npm install",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:webhooks": "node test-webhooks.js"
   },
   "keywords": [
     "ollama",
