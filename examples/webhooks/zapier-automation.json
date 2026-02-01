@@ -3,7 +3,7 @@
   "description": "Trigger Zapier workflows when goals are reached",
   "webhook": {
     "name": "Zapier Goal Triggers",
-    "url": "https://hooks.zapier.com/hooks/catch/12345/abcdef/",
+    "url": "${ZAPIER_WEBHOOK_URL}",
     "event": "goal_reached",
     "template": {
       "event": "goal_reached",
