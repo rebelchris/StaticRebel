@@ -1,13 +1,9 @@
 node_modules/
 .env
-.DS_Store
-package-lock.json
-dist/
 *.log
-*.sql
-*.sqlite
-*.sqlite-journal
-*.sqlite3
-# Skill data (user-specific, but keep defaults)
-data/*.json
-!data/_goals.json
+.DS_Store
+tmp/
+data/journal/
+data/_goals.json
+!lib/api/
+!docs/api.md
