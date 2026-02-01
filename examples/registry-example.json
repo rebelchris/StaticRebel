@@ -1,0 +1,84 @@
+{
+  "registries": [
+    {
+      "name": "official",
+      "url": "https://raw.githubusercontent.com/static-rebel/skill-registry/main/registry.json",
+      "enabled": true
+    },
+    {
+      "name": "github-releases", 
+      "url": "https://api.github.com/repos/static-rebel/skill-packs/releases",
+      "type": "github",
+      "enabled": true
+    }
+  ],
+  "packages": {
+    "fitness-pack": {
+      "name": "fitness-pack",
+      "version": "1.0.0",
+      "description": "Comprehensive fitness tracking and motivation skills",
+      "author": "StaticRebel Team",
+      "keywords": ["fitness", "health", "tracking", "workout"],
+      "homepage": "https://github.com/static-rebel/fitness-pack",
+      "repository": "https://github.com/static-rebel/fitness-pack",
+      "tarball": "https://github.com/static-rebel/fitness-pack/archive/v1.0.0.tar.gz",
+      "published_at": "2024-02-01T00:00:00Z"
+    },
+    "productivity-pack": {
+      "name": "productivity-pack", 
+      "version": "2.1.0",
+      "description": "Task management, time tracking, and productivity tools",
+      "author": "ProductivePro",
+      "keywords": ["productivity", "tasks", "time", "organization"],
+      "homepage": "https://github.com/productivepro/productivity-pack",
+      "repository": "https://github.com/productivepro/productivity-pack", 
+      "tarball": "https://github.com/productivepro/productivity-pack/archive/v2.1.0.tar.gz",
+      "published_at": "2024-01-15T00:00:00Z"
+    },
+    "learning-pack": {
+      "name": "learning-pack",
+      "version": "1.5.2", 
+      "description": "Study tracking, flashcards, and learning progress",
+      "author": "EduTech Solutions",
+      "keywords": ["learning", "education", "study", "flashcards", "progress"],
+      "homepage": "https://github.com/edutech/learning-pack",
+      "repository": "https://github.com/edutech/learning-pack",
+      "tarball": "https://github.com/edutech/learning-pack/archive/v1.5.2.tar.gz",
+      "published_at": "2024-01-30T00:00:00Z"
+    },
+    "finance-pack": {
+      "name": "finance-pack",
+      "version": "3.0.1",
+      "description": "Expense tracking, budgeting, and financial planning",
+      "author": "FinanceWiz",
+      "keywords": ["finance", "budget", "expenses", "money", "planning"],
+      "homepage": "https://github.com/financewiz/finance-pack", 
+      "repository": "https://github.com/financewiz/finance-pack",
+      "tarball": "https://github.com/financewiz/finance-pack/archive/v3.0.1.tar.gz",
+      "published_at": "2024-01-20T00:00:00Z"
+    },
+    "social-pack": {
+      "name": "social-pack",
+      "version": "1.2.0",
+      "description": "Social media management and content planning",
+      "author": "SocialGuru",
+      "keywords": ["social", "media", "content", "planning", "marketing"],
+      "homepage": "https://github.com/socialguru/social-pack",
+      "repository": "https://github.com/socialguru/social-pack", 
+      "tarball": "https://github.com/socialguru/social-pack/archive/v1.2.0.tar.gz",
+      "published_at": "2024-02-01T00:00:00Z"
+    },
+    "health-base": {
+      "name": "health-base",
+      "version": "1.0.0", 
+      "description": "Base health tracking utilities and common functions",
+      "author": "HealthTech",
+      "keywords": ["health", "base", "utilities", "tracking"],
+      "homepage": "https://github.com/healthtech/health-base",
+      "repository": "https://github.com/healthtech/health-base",
+      "tarball": "https://github.com/healthtech/health-base/archive/v1.0.0.tar.gz",
+      "published_at": "2024-01-10T00:00:00Z"
+    }
+  },
+  "lastUpdated": "2024-02-01T12:00:00Z"
+}

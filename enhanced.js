@@ -18,6 +18,7 @@ import http from 'http';
 import https from 'https';
 import { spawn } from 'child_process';
 import { loadConfig } from './lib/configManager.js';
+import { marketplaceCommand } from './lib/marketplace/cli.js';
 import {
   initMemory,
   getMemoryStats,
@@ -2037,6 +2038,21 @@ async function main() {
   if (args.includes('--dashboard') || args.includes('-d')) {
     await startDashboard();
     return;
+  }
+
+  // Check for marketplace commands
+  if (args.length > 0) {
+    const marketplaceCommands = ['install', 'uninstall', 'remove', 'search', 'list', 'update', 'publish', 'init', 'validate', 'stats'];
+    if (marketplaceCommands.includes(args[0])) {
+      try {
+        const result = await marketplaceCommand(args);
+        console.log(result);
+        return;
+      } catch (error) {
+        console.error('Marketplace error:', error.message);
+        return;
+      }
+    }
   }
 
   const message = args.join(' ');

@@ -1,0 +1,12 @@
+{
+  "name": "my-skill-pack",
+  "version": "1.0.0",
+  "description": "A new StaticRebel skill pack",
+  "author": "Your Name",
+  "license": "MIT",
+  "keywords": [],
+  "skills": [],
+  "engines": {
+    "static-rebel": ">=2.0.0"
+  }
+}

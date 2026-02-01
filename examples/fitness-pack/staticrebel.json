@@ -1,0 +1,49 @@
+{
+  "name": "fitness-pack",
+  "version": "1.0.0",
+  "description": "Comprehensive fitness tracking and motivation skills for StaticRebel",
+  "author": "StaticRebel Team <team@staticrebel.dev>",
+  "license": "MIT",
+  "keywords": ["fitness", "health", "tracking", "motivation", "workout", "exercise"],
+  "homepage": "https://github.com/static-rebel/fitness-pack",
+  "repository": "https://github.com/static-rebel/fitness-pack",
+  "engines": {
+    "static-rebel": ">=2.0.0"
+  },
+  "skills": [
+    {
+      "name": "workout-tracker",
+      "path": "skills/workout-tracker",
+      "description": "Track and log workout sessions"
+    },
+    {
+      "name": "fitness-goals",
+      "path": "skills/fitness-goals",
+      "description": "Set and monitor fitness goals"
+    },
+    {
+      "name": "nutrition-logger",
+      "path": "skills/nutrition-logger", 
+      "description": "Log meals and track nutrition"
+    }
+  ],
+  "config": {
+    "units": {
+      "type": "string",
+      "enum": ["metric", "imperial"],
+      "default": "metric",
+      "description": "Measurement units preference"
+    },
+    "goals": {
+      "type": "object",
+      "description": "Default fitness goals"
+    }
+  },
+  "dependencies": {
+    "health-base": "^1.0.0"
+  },
+  "scripts": {
+    "postinstall": "echo 'Fitness pack installed! Type \"fitness help\" to get started.'",
+    "preuninstall": "echo 'Removing fitness tracking data...'"
+  }
+}
