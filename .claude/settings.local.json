@@ -44,7 +44,18 @@
       "Bash(npm run build)",
       "Bash(npm --version)",
       "Bash(cat:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash)",
+      "Bash(git stash pop)",
+      "Bash({ echo \"/skill list\")",
+      "Bash(})",
+      "Bash({ echo \"test\")",
+      "Bash({ echo:*)",
+      "Bash(npm run assistant:*)",
+      "Bash(npx tsc:*)",
+      "Bash(sqlite3:*)",
+      "Bash(sleep 1 DEBUG_CHAT=true node --experimental-vm-modules -e \" import { handleChat } from ''./lib/chatHandler.js''; const result = await handleChat\\(''I had 2 glasses water'', { source: ''test'' }\\); console.log\\(''Type:'', result.type\\); console.log\\(''Action:'', result.action\\); console.log\\(''Content:'', result.content\\); \")"
     ]
   }
 }

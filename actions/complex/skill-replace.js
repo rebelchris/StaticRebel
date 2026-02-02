@@ -178,7 +178,7 @@ function getSimulatedResults(query) {
     ],
 
     // Original apps
-    getdex: [
+    'getdex': [
       {
         title: 'GetDex - Habit Tracker & Goal Tracker',
         snippet: 'GetDex is a simple habit tracker that helps you build good habits and break bad ones. Track daily habits, set goals, view streaks, and get reminders.',

@@ -3,12 +3,14 @@
  * Creates scheduled reminders and cron jobs
  */
 
+import { listCronJobs, addCronJob, describeCron, getNextRunTime } from '../../lib/cronScheduler.js';
+
 export default {
   name: 'schedule',
   displayName: 'Schedule Reminders',
   description: 'Create scheduled reminders, set alarms, and manage cron jobs',
   category: 'utility',
-  version: '1.0.0',
+  version: '1.0.1',
 
   intentExamples: [
     'remind me to',
@@ -39,15 +41,16 @@ export default {
     },
   },
 
-  dependencies: [
-    'cronScheduler.addCronJob',
-    'cronScheduler.getNextRunTime',
-    'cronScheduler.describeCron',
-  ],
+  dependencies: [],
 
   async handler(input, context, params) {
-    const { addCronJob, getNextRunTime, describeCron } =
-      context.modules.cronScheduler;
+    // Get cronScheduler from context.modules or use imported functions
+    let cronModule = context.modules?.cronScheduler;
+
+    // Fallback to direct imports if context.modules.cronScheduler is missing
+    const doAddCronJob = cronModule?.addCronJob || addCronJob;
+    const doGetNextRunTime = cronModule?.getNextRunTime || getNextRunTime;
+    const doDescribeCron = cronModule?.describeCron || describeCron;
 
     // Extract time pattern
     const timeMatch = input.match(/(\d{1,2})(:(\d{2}))?( ?(am|pm))?/i);
@@ -86,26 +89,33 @@ export default {
       saturday: 6,
     };
     if (daysMatch) {
-      const day = dayMap[daysMatch[2].toLowerCase()];
-      cronExpr = cronExpr.replace('* *', `* ${day}`);
+      const day = dayMap[daysMatch[2]?.toLowerCase()];
+      if (day !== undefined) {
+        cronExpr = cronExpr.replace('* *', `* ${day}`);
+      }
     }
 
     // Parse task
     const taskName = taskMatch || 'Scheduled Task';
 
-    const job = addCronJob({
-      name: taskName,
-      schedule: { expr: cronExpr },
-      payload: { text: input },
-    });
+    try {
+      const job = doAddCronJob({
+        name: taskName,
+        schedule: { expr: cronExpr },
+        payload: { text: input },
+      });
 
-    const nextRun = getNextRunTime(job);
-    const humanSchedule = describeCron(cronExpr);
+      const nextRun = doGetNextRunTime(job);
+      const humanSchedule = doDescribeCron(cronExpr);
 
-    return `✅ Done! I've scheduled "${taskName}" to run ${humanSchedule}.\nNext run: ${nextRun?.toLocaleString() || 'soon'}`;
+      return `✅ Done! I've scheduled "${taskName}" to run ${humanSchedule}.\nNext run: ${nextRun?.toLocaleString() || 'soon'}`;
+    } catch (e) {
+      return `Failed to create schedule: ${e.message}`;
+    }
   },
 
   source: 'builtin',
   enabled: true,
   createdAt: '2026-01-29',
+  updatedAt: '2026-02-02',
 };

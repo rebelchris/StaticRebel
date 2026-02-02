@@ -161,25 +161,118 @@ import {
 const PROFILE_FILE = path.join(os.homedir(), '.static-rebel-profile.md');
 
 // ============================================================================
-// Dashboard Server
+// Unified API Server - Serves Web, Telegram, and other integrations
 // ============================================================================
 
-async function startDashboard() {
-  console.log('Starting Dashboard Server...');
+let apiServer = null;
+let serverInstance = null;
 
-  try {
-    // Dynamic import to avoid requiring dashboard dependencies in main package
-    const dashboardPath = path.join(__dirname, 'dashboard', 'server.js');
-    const { default: dashboard } = await import(dashboardPath);
-    return dashboard;
-  } catch (error) {
-    console.error('Failed to start dashboard:', error.message);
-    console.log(
-      '\nTo use the dashboard, please install dashboard dependencies:',
-    );
-    console.log('  cd dashboard && npm install\n');
-    process.exit(1);
-  }
+async function startApiServer(port = 8080) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(async (req, res) => {
+      // CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      const url = new URL(req.url, `http://localhost:${port}`);
+
+      // Health check endpoint
+      if (url.pathname === '/api/health' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          service: 'charlize-assistant',
+          version: '2.0',
+          timestamp: new Date().toISOString()
+        }));
+        return;
+      }
+
+      // Chat API endpoint
+      if (url.pathname === '/api/chat' && req.method === 'POST') {
+        try {
+          let body = '';
+          for await (const chunk of req) {
+            body += chunk.toString();
+          }
+
+          const { message, context = {} } = JSON.parse(body);
+
+          if (!message || typeof message !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Message is required' }));
+            return;
+          }
+
+          const result = await handleChat(message, {
+            source: 'api',
+            context
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            response: result.content || "I didn't understand that.",
+            type: result.type,
+            confidence: result.confidence
+          }));
+        } catch (error) {
+          console.error('[API] Chat error:', error.message);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Failed to process message',
+            details: error.message
+          }));
+        }
+        return;
+      }
+
+      // Stats endpoint
+      if (url.pathname === '/api/stats' && req.method === 'GET') {
+        const memStats = getMemoryStats();
+        const schedulerStatus = getSchedulerStatus();
+        const skillsStats = getSkillsStats();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          memory: memStats,
+          scheduler: schedulerStatus,
+          skills: skillsStats
+        }));
+        return;
+      }
+
+      // 404 for other routes
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${port} in use, trying ${port + 1}...`);
+        startApiServer(port + 1).then(resolve).catch(reject);
+      } else {
+        reject(err);
+      }
+    });
+
+    server.listen(port, () => {
+      console.log(chalk.cyan(`\n🌐 API Server running on http://localhost:${port}`));
+      console.log(chalk.dim('   Endpoints:'));
+      console.log(chalk.dim('   - POST /api/chat   : Send a message'));
+      console.log(chalk.dim('   - GET  /api/health : Health check'));
+      console.log(chalk.dim('   - GET  /api/stats  : System stats\n'));
+      apiServer = server;
+      serverInstance = server;
+      resolve(server);
+    });
+  });
 }
 
 // ============================================================================
@@ -325,7 +418,8 @@ const INTENT_PATTERNS = {
   track: [
     /log (my |the )?(calories|food|meal|workout|exercise|sleep|habit)/i,
     /track (my |the )?(calories|food|meal|workout|exercise|sleep|habit)/i,
-    /i (just )?(had|ate|drank|consumed)/i,
+    // Require explicit tracking context - "I had" alone is too broad
+    /i (just )?(ate|drank|had) \d+/i,  // "I ate 500", "I drank 300ml" - has number
     /how many (calories|cals)/i,
     /what'?ve i (eaten|drank|drunk|had)/i,
     /what did i (eat|drink|have|consume)/i,
@@ -2978,8 +3072,28 @@ async function checkOllamaAndNotify() {
 async function main() {
   const args = process.argv.slice(2);
 
-  // Check for dashboard flag
+  // Check for API server flag
+  if (args.includes('--api') || args.includes('-a')) {
+    const portArgIndex = args.findIndex(a => a === '--port' || a === '-p');
+    const port = portArgIndex !== -1 ? parseInt(args[portArgIndex + 1]) : 8080;
+
+    console.log(chalk.cyan('\n🚀 Starting Charlize API Server...\n'));
+    await startApiServer(port);
+    console.log(chalk.green('API server started. Press Ctrl+C to stop.\n'));
+    return;
+  }
+
+  // Check for dashboard flag (legacy - now starts Next.js dashboard)
   if (args.includes('--dashboard') || args.includes('-d')) {
+    await startDashboard();
+    return;
+  }
+
+  // Check for combined mode (API + dashboard)
+  if (args.includes('--all') || args.includes('--full')) {
+    console.log(chalk.cyan('\n🚀 Starting Charlize with all services...\n'));
+    await startApiServer(8080);
+    console.log(chalk.yellow('\n📊 Starting Dashboard on port 3000...\n'));
     await startDashboard();
     return;
   }
@@ -3269,6 +3383,12 @@ async function main() {
     const schedulerStatus = getSchedulerStatus();
     console.log(`Memory: ${memStats.dailyFiles} files`);
     console.log(`Scheduled tasks: ${schedulerStatus.enabledCount}\n`);
+
+    // Start API server in background for web/Telegram integrations
+    const apiPort = process.env.API_PORT || 8080;
+    startApiServer(parseInt(apiPort)).catch(err => {
+      console.warn(`API server failed to start: ${err.message}`);
+    });
 
     await chatLoop();
   }

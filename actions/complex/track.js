@@ -124,7 +124,15 @@ export default {
   async handler(input, context, params) {
     const { getDefaultModel, chatCompletion } = context.modules.modelRegistry;
     const store = new TrackerStore();
-    const trackers = store.listTrackers();
+    let trackersResult = store.listTrackers();
+
+    // Handle Promise if listTrackers is async
+    let trackers = [];
+    if (trackersResult instanceof Promise) {
+      trackers = await trackersResult || [];
+    } else {
+      trackers = trackersResult || [];
+    }
 
     // Step 1: Use LLM to analyze the intent
     const intent = await analyzeTrackingIntent(
@@ -136,9 +144,6 @@ export default {
 
     // If not tracking-related or low confidence, return null to let it be handled elsewhere
     if (intent.intentType === 'none' || intent.confidence < 0.6) {
-      if (trackers.length === 0) {
-        return 'No trackers configured. Create one with: /track new';
-      }
       return null;
     }
 
@@ -149,7 +154,7 @@ export default {
 
       const trackerConfig = await parseTrackerFromNaturalLanguage(trackerDesc);
       if (!trackerConfig) {
-        return "I couldn't understand what kind of tracker you want. Try: 'create a tracker for pushups' or 'new workout tracker'";
+        return null;  // Fall back to chat instead of error
       }
 
       // Check if a tracker with this name already exists
@@ -169,7 +174,7 @@ export default {
     // Step 3: Handle QUERY intent
     if (intent.intentType === 'query') {
       if (trackers.length === 0) {
-        return "No trackers configured yet. Start logging data and I'll create one for you!";
+        return null;  // Fall back to chat
       }
 
       // Find the appropriate tracker for the query
@@ -196,7 +201,8 @@ export default {
       );
 
       if (!tracker) {
-        return "I couldn't create a tracker for this. Try: /track new";
+        // Return null to let it fall back to regular chat instead of showing an error
+        return null;
       }
 
       // Log the data
@@ -219,7 +225,8 @@ export default {
         return result.message;
       }
 
-      return `Failed to log to ${tracker.displayName}. Try rephrasing with more details.`;
+      // If logging failed, fall back to chat instead of showing error
+      return null;
     }
 
     // Fallback
