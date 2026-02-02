@@ -1,98 +1,118 @@
-# Intelligent Router
+# Hybrid Router
 
-**The new LLM-first routing system for StaticRebel.**
+**LLM extraction + deterministic execution for reliable skill routing.**
 
-## What Changed
+## Evolution
 
-The old architecture used rigid pattern matching (hundreds of regex patterns) combined with LLM classification into predefined "actions". This led to "dumb" behavior where the assistant couldn't intelligently understand user intent.
-
-The new **Intelligent Router** takes an LLM-first approach:
-
-1. **Single LLM call** analyzes user intent in the context of:
-   - Available skills (dynamically discovered)
-   - Recent conversation history
-   - User's memory/preferences
-
-2. **LLM decides** the best action:
-   - `use_skill` - Use an existing skill (with extracted parameters)
-   - `create_skill` - Propose creating a new skill for tracking
-   - `web_search` - Search the web for current information
-   - `chat` - Handle as conversation/question
-
-3. **Smart skill discovery** - Skills are the source of truth, not hardcoded patterns
-
-## Benefits
-
-- **No more "dumb" routing** - LLM understands context and intent naturally
-- **Automatic skill discovery** - New skills are immediately available
-- **Smart skill creation** - Offers to create skills when user tries to track something new
-- **Cleaner architecture** - Single decision point instead of fragmented routing
-
-## Configuration
-
-The intelligent router is **enabled by default**.
-
-To use legacy pattern-based routing:
-```bash
-USE_INTELLIGENT_ROUTER=false node enhanced.js
-```
-
-Or in code:
-```javascript
-const result = await handleChat(message, { 
-  useIntelligentRouter: false 
-});
-```
-
-## Files Changed
-
-- `lib/intelligentRouter.js` - New intelligent routing system
-- `lib/chatHandler.js` - Updated to use intelligent router by default
-- `AUTO_CREATE_SKILLS` now defaults to `true`
+1. **Old approach**: Hundreds of regex patterns - rigid, breaks on edge cases
+2. **LLM-first attempt**: Ask LLM to do everything - unreliable with small models
+3. **Hybrid approach**: LLM extracts, code executes - best of both worlds ✅
 
 ## How It Works
 
 ```
-User Input
+User Input: "My lunch was 400kcal today"
     │
     ▼
 ┌─────────────────────────────┐
-│   Intelligent Router        │
+│   LLM Extraction            │
+│   (Simple prompt)           │
 │                             │
-│   1. Gather context         │
-│      - Available skills     │
-│      - Recent memory        │
-│      - Conversation history │
-│                             │
-│   2. LLM analyzes intent    │
-│      "What does user want?" │
-│                             │
-│   3. Execute decision       │
-│      - use_skill            │
-│      - create_skill         │
-│      - web_search           │
-│      - chat                 │
+│   {                         │
+│     "intent": "log",        │
+│     "category": "calories", │
+│     "value": 400,           │
+│     "unit": "kcal",         │
+│     "note": "lunch"         │
+│   }                         │
 └─────────────────────────────┘
     │
     ▼
-Response
+┌─────────────────────────────┐
+│   Code Execution            │
+│   (Deterministic)           │
+│                             │
+│   1. Find skill for         │
+│      "calories" category    │
+│   2. Create if not exists   │
+│   3. Log 400 kcal           │
+│   4. Return stats           │
+└─────────────────────────────┘
+    │
+    ▼
+Response: "📊 Logged to calories: 400 kcal"
 ```
 
-## Example Decisions
+## Why This Works
 
-| User Input | Decision | Reason |
-|------------|----------|--------|
-| "drank 500ml water" | `use_skill` (water) | Matches water tracking skill |
-| "did 30 pushups" | `create_skill` | No pushup skill exists yet |
-| "what's the weather in Cape Town?" | `web_search` | Needs current data |
-| "how are you?" | `chat` | Conversational |
-| "show my water stats" | `use_skill` (water, query) | Query existing skill |
+**LLM is good at:**
+- Understanding natural language
+- Extracting structured data from messy input
+- Determining user intent
 
-## Debugging
+**LLM is bad at:**
+- Following complex multi-step prompts
+- Consistent skill matching
+- Remembering all the rules
 
-Enable debug logging:
+**Code is good at:**
+- Fuzzy matching (category → skill)
+- Creating skills with proper defaults
+- Executing reliably every time
+
+## Dynamic Skills
+
+The router works for **any skill type**:
+
+| Input | Category | Auto-Created Skill |
+|-------|----------|-------------------|
+| "400kcal lunch" | calories | 🍽️ calories (kcal, goal: 2000) |
+| "Slept 7 hours" | sleep | 😴 sleep (hours, goal: 8) |
+| "Feeling good" | mood | 😊 mood (score) |
+| "5000 steps" | steps | 🚶 steps (steps, goal: 10000) |
+| "2 coffees" | coffee | ☕ coffee (cups, goal: 3) |
+| "Ran 5km" | running | 🏃 running (km, goal: 5) |
+
+No hardcoding needed - just tell it what you did!
+
+## Files
+
+- `lib/hybridRouter.js` - The hybrid routing system
+- `lib/simpleRouter.js` - Fallback deterministic router
+- `lib/intelligentRouter.js` - Deprecated LLM-first router
+
+## Configuration
+
+Hybrid router is **enabled by default**.
+
 ```bash
+# Enable debug logging
 DEBUG_ROUTER=true node enhanced.js
+
+# Use legacy pattern matching
+USE_INTELLIGENT_ROUTER=false node enhanced.js
 ```
 
-This will show the LLM's decision-making process.
+## The LLM Prompt
+
+Simple and focused:
+
+```
+Extract information from this user input. Respond with ONLY valid JSON.
+
+Input: "${input}"
+
+Extract:
+- intent: "log" (recording data), "query" (asking about data), or "chat"
+- category: what they're tracking (water, calories, steps, sleep, mood, etc.)
+- value: the numeric amount (null if none)
+- unit: the unit of measurement
+- note: any additional context
+
+Examples:
+"I drank 500ml of water" → {"intent":"log","category":"water","value":500,"unit":"ml"}
+"My lunch was 400kcal" → {"intent":"log","category":"calories","value":400,"unit":"kcal","note":"lunch"}
+"How much water today?" → {"intent":"query","category":"water","value":null}
+```
+
+No complex rules. No "don't do this". Just examples.
