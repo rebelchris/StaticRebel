@@ -1,0 +1,31 @@
+{
+  "summaries": [],
+  "entities": {
+    "people": [],
+    "projects": [],
+    "topics": [],
+    "locations": [],
+    "dates": []
+  },
+  "habits": {
+    "timePatterns": {},
+    "topicFrequency": {},
+    "preferredFormats": {},
+    "commandUsage": {}
+  },
+  "preferences": {
+    "communication": {},
+    "technical": {},
+    "general": {}
+  },
+  "patterns": {
+    "recurring": [],
+    "workflows": []
+  },
+  "metadata": {
+    "version": 1,
+    "createdAt": "2026-02-04T00:00:00.000Z",
+    "lastUpdated": "2026-02-04T00:00:00.000Z",
+    "totalInteractions": 0
+  }
+}
