@@ -30,13 +30,7 @@ export async function POST(request: NextRequest) {
     
     const result = await webpush.sendNotification(
       subscription,
-      pushPayload,
-      {
-        TTL: options.ttl || 3600, // 1 hour
-        urgency: options.urgency || 'normal',
-        topic: options.topic,
-        ...options
-      }
+      pushPayload
     );
     
     return NextResponse.json({ 

@@ -72,7 +72,7 @@ export async function GET() {
     // Try to get tracker stats
     try {
       const store = new TrackerStore();
-      const trackers = store.listTrackers();
+      const trackers = await store.listTrackers();
       status.trackers.list = trackers;
       status.trackers.stats.total = trackers.length;
     } catch (e) {
