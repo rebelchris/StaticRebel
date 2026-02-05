@@ -8,10 +8,22 @@
     "dates": []
   },
   "habits": {
-    "timePatterns": {},
-    "topicFrequency": {},
+    "timePatterns": {
+      "Thursday": {
+        "8": 2
+      }
+    },
+    "topicFrequency": {
+      "tracking": 1,
+      "questions": 1
+    },
     "preferredFormats": {},
-    "commandUsage": {}
+    "commandUsage": {
+      "chat": {
+        "count": 2,
+        "lastUsed": "2026-02-05T06:56:15.186Z"
+      }
+    }
   },
   "preferences": {
     "communication": {},
@@ -25,7 +37,7 @@
   "metadata": {
     "version": 1,
     "createdAt": "2026-02-04T00:00:00.000Z",
-    "lastUpdated": "2026-02-04T00:00:00.000Z",
+    "lastUpdated": "2026-02-05T06:56:15.186Z",
     "totalInteractions": 0
   }
 }
