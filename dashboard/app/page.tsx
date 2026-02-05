@@ -1,247 +1,107 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  MessageSquare,
-  Brain,
-  Activity,
-  TrendingUp,
-  Clock,
-  RefreshCw,
-} from 'lucide-react';
-import { UserProfile } from '@/components/UserProfile';
-import { PWAFeatures } from '@/components/PWAFeatures';
-
-interface Conversation {
-  id: string;
-  preview: string;
-  timestamp: string;
-  type: string;
-}
-
-interface DashboardStats {
-  totalInteractions: number;
-  todayInteractions: number;
-  memoryEntries: number;
-  activeTrackers: number;
-  recentConversations: Conversation[];
-  personas?: {
-    active?: {
-      name?: string;
-    } | null;
-  };
-  memory?: {
-    vector?: {
-      total?: number;
-    };
-  };
-  trackers?: {
-    stats?: {
-      total?: number;
-    };
-  };
-}
+import { MessageSquare, Sparkles, Settings, Zap, ArrowRight } from 'lucide-react';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<{ conversations: number; skills: number; connected: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchStats = useCallback(async () => {
-    try {
-      setRefreshing(true);
-      const res = await fetch('/api/dashboard/stats', {
-        cache: 'no-store',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
 
   useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+    fetch('/api/dashboard/stats')
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setStats({
+            conversations: data?.totalInteractions || 0,
+            skills: data?.activeSkills || 0,
+            connected: true
+          }));
+        }
+        throw new Error('Not ok');
+      })
+      .catch(() => setStats({ conversations: 0, skills: 0, connected: false }))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const handleRefresh = () => {
-    fetchStats();
-  };
+  const quickActions = [
+    { name: 'New Chat', href: '/chat', icon: MessageSquare },
+    { name: 'Skills', href: '/skills', icon: Sparkles },
+    { name: 'Settings', href: '/settings', icon: Settings },
+  ];
 
-  const statCards = [
-    {
-      name: 'Total Interactions',
-      value: stats?.totalInteractions || 0,
-      icon: MessageSquare,
-      color: 'bg-blue-500',
-      href: '/chat',
-    },
-    {
-      name: "Today's Activity",
-      value: stats?.todayInteractions || 0,
-      icon: TrendingUp,
-      color: 'bg-orange-500',
-      href: '/chat',
-    },
-    {
-      name: 'Memory Entries',
-      value: stats?.memory?.vector?.total || stats?.memoryEntries || 0,
-      icon: Brain,
-      color: 'bg-purple-500',
-      href: '/memory',
-    },
-    {
-      name: 'Active Trackers',
-      value: stats?.trackers?.stats?.total || stats?.activeTrackers || 0,
-      icon: Activity,
-      color: 'bg-green-500',
-      href: '/trackers',
-    },
+  const examples = [
+    { input: 'I drank 2 glasses of water', action: 'Track hydration' },
+    { input: "What's trending on Twitter?", action: 'Search web' },
+    { input: 'Make a todo list in react', action: 'Create project' },
   ];
 
   if (loading) {
     return (
-      <div className='mx-auto max-w-7xl'>
-        <div className='flex items-center justify-center h-64'>
-          <div className='w-8 h-8 border-b-2 rounded-full animate-spin border-primary-600'></div>
-        </div>
+      <div className='flex items-center justify-center h-64'>
+        <div className='w-8 h-8 border-2 border-gray-900 rounded-full animate-spin' />
       </div>
     );
   }
 
   return (
-    <div className='mx-auto max-w-7xl'>
-      {/* Header with UserProfile */}
-      <div className='flex items-center justify-between mb-8'>
-        <div>
-          <h1 className='text-2xl font-bold text-gray-900'>Dashboard</h1>
-          <p className='mt-1 text-sm text-gray-500'>
-            Overview of your StaticRebel activity
-          </p>
-        </div>
-        <UserProfile />
+    <div className='max-w-4xl mx-auto space-y-8'>
+      <div className='text-center'>
+        <h1 className='text-3xl font-bold text-gray-900'>Welcome to StaticRebel</h1>
+        <p className='mt-2 text-gray-500'>Your local AI assistant - just talk naturally</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className='grid grid-cols-1 gap-5 mb-8 sm:grid-cols-2 lg:grid-cols-4'>
-        {statCards.map((card) => (
-          <Link
-            key={card.name}
-            href={card.href}
-            className='overflow-hidden transition-shadow bg-white rounded-lg shadow hover:shadow-md'
-          >
-            <div className='p-5'>
-              <div className='flex items-center'>
-                <div className={`flex-shrink-0 ${card.color} rounded-md p-3`}>
-                  <card.icon className='w-6 h-6 text-white' />
-                </div>
-                <div className='flex-1 w-0 ml-5'>
-                  <dl>
-                    <dt className='text-sm font-medium text-gray-500 truncate'>
-                      {card.name}
-                    </dt>
-                    <dd className='text-2xl font-semibold text-gray-900'>
-                      {card.value}
-                    </dd>
-                  </dl>
-                </div>
+      <div className='grid grid-cols-3 gap-4'>
+        <div className='p-4 bg-gray-900 rounded-lg text-white text-center'>
+          <MessageSquare className='w-6 h-6 mx-auto mb-2' />
+          <div className='text-2xl font-bold'>{stats?.conversations || 0}</div>
+          <div className='text-sm text-gray-400'>Conversations</div>
+        </div>
+        <div className='p-4 bg-gray-900 rounded-lg text-white text-center'>
+          <Sparkles className='w-6 h-6 mx-auto mb-2' />
+          <div className='text-2xl font-bold'>{stats?.skills || 0}</div>
+          <div className='text-sm text-gray-400'>Skills</div>
+        </div>
+        <div className='p-4 bg-gray-900 rounded-lg text-white text-center'>
+          <Zap className='w-6 h-6 mx-auto mb-2' />
+          <div className='text-2xl font-bold'>{stats?.connected ? 'On' : 'Off'}</div>
+          <div className='text-sm text-gray-400'>Status</div>
+        </div>
+      </div>
+
+      <div>
+        <h2 className='text-lg font-semibold text-gray-900 mb-4'>Quick Actions</h2>
+        <div className='grid grid-cols-3 gap-3'>
+          {quickActions.map(action => (
+            <Link
+              key={action.name}
+              href={action.href}
+              className='flex flex-col items-center p-4 bg-gray-900 rounded-lg text-white hover:opacity-90'
+            >
+              <action.icon className='w-6 h-6 mb-2' />
+              <div className='font-medium'>{action.name}</div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h2 className='text-lg font-semibold text-gray-900 mb-4'>Try saying...</h2>
+        <div className='space-y-2'>
+          {examples.map((ex, i) => (
+            <Link
+              key={i}
+              href={`/chat?message=${encodeURIComponent(ex.input)}`}
+              className='flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100'
+            >
+              <div>
+                <div className='font-medium text-gray-900'>"{ex.input}"</div>
+                <div className='text-sm text-gray-500'>{ex.action}</div>
               </div>
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {/* Main Content Grid */}
-      <div className='grid grid-cols-1 gap-5 lg:grid-cols-2'>
-        {/* Recent Conversations */}
-        <div className='bg-white rounded-lg shadow'>
-          <div className='px-4 py-5 sm:p-6'>
-            <h3 className='text-lg font-medium leading-6 text-gray-900'>
-              Recent Conversations
-            </h3>
-            <div className='mt-4 space-y-3'>
-              {stats?.recentConversations?.length ? (
-                stats.recentConversations.map((conv) => (
-                  <div
-                    key={conv.id}
-                    className='flex items-center justify-between p-3 rounded-md bg-gray-50'
-                  >
-                    <div className='flex items-center'>
-                      <MessageSquare className='w-5 h-5 mr-3 text-gray-400' />
-                      <p className='max-w-xs text-sm text-gray-700 truncate'>
-                        {conv.preview}
-                      </p>
-                    </div>
-                    <span className='text-xs text-gray-500'>
-                      {new Date(conv.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className='text-sm text-gray-500'>No recent conversations</p>
-              )}
-            </div>
-            <div className='mt-4'>
-              <Link
-                href='/chat'
-                className='text-sm font-medium text-primary-600 hover:text-primary-500'
-              >
-                Start a conversation →
-              </Link>
-            </div>
-          </div>
+              <ArrowRight className='w-4 h-4 text-gray-400' />
+            </Link>
+          ))}
         </div>
-
-        {/* Quick Actions */}
-        <div className='p-6 bg-white rounded-lg shadow'>
-          <h3 className='mb-4 text-lg font-medium text-gray-900'>
-            Quick Actions
-          </h3>
-          <div className='grid grid-cols-2 gap-3'>
-            <Link
-              href='/chat'
-              className='inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md bg-primary-600 hover:bg-primary-700'
-            >
-              <MessageSquare className='w-4 h-4 mr-2' />
-              Start Chat
-            </Link>
-            <Link
-              href='/memory'
-              className='inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50'
-            >
-              <Brain className='w-4 h-4 mr-2' />
-              View Memory
-            </Link>
-            <Link
-              href='/trackers'
-              className='inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50'
-            >
-              <Activity className='w-4 h-4 mr-2' />
-              Trackers
-            </Link>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className='inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
-            >
-              <RefreshCw
-                className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`}
-              />
-              Refresh
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* PWA Features */}
-      <div className='mt-8'>
-        <PWAFeatures />
       </div>
     </div>
   );

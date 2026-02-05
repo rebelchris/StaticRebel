@@ -5,30 +5,18 @@ import { usePathname } from 'next/navigation';
 import {
   MessageSquare,
   LayoutDashboard,
-  Brain,
-  Activity,
   Settings,
+  Sparkles,
   Menu,
   X,
-  FileText,
-  UserCircle,
-  Server,
-  Cog,
-  Target,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
-  { name: 'Skills', href: '/skills', icon: Target },
-  { name: 'Personas', href: '/personas', icon: UserCircle },
-  { name: 'Memory', href: '/memory', icon: Brain },
-  { name: 'Workers', href: '/workers', icon: Server },
-  { name: 'Trackers', href: '/trackers', icon: Activity },
-  { name: 'Logs', href: '/logs', icon: FileText },
-  { name: 'Config', href: '/config', icon: Cog },
+  { name: 'Skills', href: '/skills', icon: Sparkles },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -38,7 +26,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button */}
       <button
         className='fixed z-50 p-2 bg-white rounded-md shadow-md top-4 left-4 md:hidden'
         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -46,7 +33,6 @@ export function Sidebar() {
         {sidebarOpen ? <X className='w-6 h-6' /> : <Menu className='w-6 h-6' />}
       </button>
 
-      {/* Mobile backdrop */}
       {sidebarOpen && (
         <div
           className='fixed inset-0 z-40 bg-gray-600 bg-opacity-75 md:hidden'
@@ -54,7 +40,6 @@ export function Sidebar() {
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={clsx(
           'fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out md:translate-x-0 md:static md:inset-auto',
@@ -62,12 +47,10 @@ export function Sidebar() {
         )}
       >
         <div className='flex flex-col h-full'>
-          {/* Logo */}
-          <div className='flex items-center h-16 px-4 bg-primary-600'>
+          <div className='flex items-center h-16 px-4 bg-gray-900'>
             <span className='text-xl font-bold text-white'>StaticRebel</span>
           </div>
 
-          {/* Navigation */}
           <nav className='flex-1 px-2 py-4 space-y-1 overflow-y-auto'>
             {navigation.map((item) => {
               const isActive = pathname === item.href;
@@ -79,31 +62,44 @@ export function Sidebar() {
                   className={clsx(
                     'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
                     isActive
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                      ? 'bg-gray-900 text-white'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
                   )}
                 >
-                  <item.icon
-                    className={clsx(
-                      'mr-3 h-5 w-5',
-                      isActive ? 'text-primary-500' : 'text-gray-400',
-                    )}
-                  />
+                  <item.icon className={clsx('mr-3 h-5 w-5', isActive ? 'text-white' : 'text-gray-400')} />
                   {item.name}
                 </Link>
               );
             })}
           </nav>
 
-          {/* Status indicator */}
           <div className='p-4 border-t border-gray-200'>
-            <div className='flex items-center'>
-              <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse' />
-              <span className='ml-2 text-sm text-gray-500'>System Online</span>
-            </div>
+            <StatusIndicator />
           </div>
         </div>
       </aside>
     </>
+  );
+}
+
+function StatusIndicator() {
+  const [status, setStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+
+  useEffect(() => {
+    fetch('/api/status')
+      .then(res => res.ok ? setStatus('connected') : setStatus('disconnected'))
+      .catch(() => setStatus('disconnected'));
+  }, []);
+
+  return (
+    <div className='flex items-center'>
+      <div className={clsx('w-2 h-2 rounded-full',
+        status === 'connected' ? 'bg-green-500' :
+        status === 'disconnected' ? 'bg-red-500' : 'bg-yellow-500'
+      )} />
+      <span className='ml-2 text-sm text-gray-500'>
+        {status === 'connected' ? 'Connected' : status === 'disconnected' ? 'Offline' : 'Checking...'}
+      </span>
+    </div>
   );
 }
